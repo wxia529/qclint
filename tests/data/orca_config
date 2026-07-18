@@ -1,4 +1,3 @@
 max_cores = 64
-max_memory = 280
-gaussian_memory_percent = 100
-orca_memory_percent = 80
+gaussian_max_memory = 280
+orca_max_memory = 224

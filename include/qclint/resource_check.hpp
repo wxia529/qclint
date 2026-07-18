@@ -1,7 +1,5 @@
 #pragma once
 
-#include "qclint/user_config.hpp"
-
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -12,6 +10,11 @@ namespace qclint {
 struct ResourceRequest {
     std::optional<std::uint32_t> cores;
     std::optional<std::uint64_t> memory_bytes;
+};
+
+struct ResourceLimits {
+    std::optional<std::uint32_t> max_cores;
+    std::optional<std::uint64_t> max_memory_bytes;
 };
 
 enum class ResourceError {
@@ -36,13 +39,10 @@ class ResourceChecker {
 public:
     ResourceResult check(
         const ResourceRequest& request,
-        const UserConfig& limits,
-        std::uint8_t memory_percent = 100
+        const ResourceLimits& limits
     ) const;
 };
 
 std::string format_bytes(std::uint64_t bytes);
-std::uint64_t memory_limit_bytes(std::uint64_t configured_bytes,
-                                 std::uint8_t percent) noexcept;
 
 }  // namespace qclint

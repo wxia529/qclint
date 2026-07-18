@@ -1,5 +1,4 @@
 # qclint test resource limits
 max_cores = 8
-max_memory = 4
-gaussian_memory_percent = 100
-orca_memory_percent = 80
+gaussian_max_memory = 4
+orca_max_memory = 4

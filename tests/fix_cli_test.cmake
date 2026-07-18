@@ -55,7 +55,7 @@ execute_process(
 file(READ "${ORCA_COPY}" orca_contents)
 if(NOT orca_result EQUAL 0 OR
    NOT orca_contents MATCHES "nprocs 2" OR
-   NOT orca_contents MATCHES "%maxcore 409" OR
+   NOT orca_contents MATCHES "%maxcore 512" OR
    NOT orca_contents MATCHES "\\* xyz 0 2")
     message(FATAL_ERROR "ORCA --fix-all failed:\n${orca_output}\n${orca_error}")
 endif()
@@ -85,7 +85,7 @@ file(READ "${COMMENT_COPY}" comment_contents)
 if(NOT comment_result EQUAL 0 OR
    NOT comment_contents MATCHES "# Historical example: %maxcore 9999" OR
    NOT comment_contents MATCHES "# Historical example: nprocs 128" OR
-   NOT comment_contents MATCHES "%maxcore 409" OR
+   NOT comment_contents MATCHES "%maxcore 512" OR
    NOT comment_contents MATCHES "nprocs 2")
     message(FATAL_ERROR "Fixing directives modified comments")
 endif()

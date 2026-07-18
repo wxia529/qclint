@@ -10,9 +10,8 @@ namespace qclint {
 
 struct UserConfig {
     std::optional<std::uint32_t> max_cores;
-    std::optional<std::uint64_t> max_memory_bytes;
-    std::uint8_t gaussian_memory_percent = 100;
-    std::uint8_t orca_memory_percent = 80;
+    std::optional<std::uint64_t> gaussian_max_memory_bytes;
+    std::optional<std::uint64_t> orca_max_memory_bytes;
 };
 
 struct UserConfigResult {

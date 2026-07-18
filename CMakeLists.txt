@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-set(QCLINT_VERSION "1.0.0" CACHE STRING "qclint release version")
+set(QCLINT_VERSION "1.1.0" CACHE STRING "qclint release version")
 project(qclint VERSION "${QCLINT_VERSION}" LANGUAGES CXX)
 
 include(GNUInstallDirs)
@@ -120,12 +120,12 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/orca_multiline.inp
     )
     add_test(
-        NAME qclint_orca_memory_margin
+        NAME qclint_orca_memory_limit
         COMMAND ${CMAKE_COMMAND}
                 -DQCLINT_EXE=$<TARGET_FILE:qclint>
                 -DINPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/orca_simple.inp
-                -DMARGIN_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/orca_margin_config
-                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/orca_margin_test.cmake
+                -DLIMIT_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/software_memory_config
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/orca_memory_limit_test.cmake
     )
     add_test(
         NAME qclint_orca_xyzfile
@@ -156,13 +156,13 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/gaussian_link1.gjf
     )
     add_test(
-        NAME qclint_gaussian_memory_margin
+        NAME qclint_gaussian_memory_limit
         COMMAND ${CMAKE_COMMAND}
                 -DQCLINT_EXE=$<TARGET_FILE:qclint>
                 -DINPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/water.gjf
-                -DMARGIN_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/gaussian_margin_config
-                -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/gaussian-margin-test
-                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/gaussian_margin_test.cmake
+                -DLIMIT_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/software_memory_config
+                -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/gaussian-memory-limit-test
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/gaussian_memory_limit_test.cmake
     )
     add_test(
         NAME qclint_config_cli

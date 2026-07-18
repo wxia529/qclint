@@ -119,7 +119,7 @@ std::string validate_modified_input(const std::filesystem::path& path,
     int charge = 0;
     int multiplicity = 1;
     ResourceRequest resources;
-    std::uint8_t memory_percent = 100;
+    std::optional<std::uint64_t> max_memory_bytes;
     bool chemistry_available = true;
 
     if (lower(path.extension().string()) == ".inp") {
@@ -129,7 +129,7 @@ std::string validate_modified_input(const std::filesystem::path& path,
         charge = parsed.molecule.charge;
         multiplicity = parsed.molecule.multiplicity;
         resources = parsed.molecule.resources;
-        memory_percent = config.orca_memory_percent;
+        max_memory_bytes = config.orca_max_memory_bytes;
         chemistry_available = parsed.molecule.chemistry_available &&
                               parsed.molecule.external_xyz.empty();
     } else {
@@ -139,7 +139,7 @@ std::string validate_modified_input(const std::filesystem::path& path,
         charge = parsed.molecule.charge;
         multiplicity = parsed.molecule.multiplicity;
         resources = parsed.molecule.resources;
-        memory_percent = config.gaussian_memory_percent;
+        max_memory_bytes = config.gaussian_max_memory_bytes;
         chemistry_available = parsed.molecule.chemistry_available;
     }
 
@@ -153,10 +153,9 @@ std::string validate_modified_input(const std::filesystem::path& path,
         (!resources.cores || *resources.cores > *config.max_cores)) {
         return "processor fix did not produce a valid limit";
     }
-    if (selection.memory && config.max_memory_bytes &&
-        (!resources.memory_bytes || *resources.memory_bytes >
-            memory_limit_bytes(*config.max_memory_bytes,
-                               memory_percent))) {
+    if (selection.memory && max_memory_bytes &&
+        (!resources.memory_bytes ||
+         *resources.memory_bytes > *max_memory_bytes)) {
         return "memory fix did not produce a valid limit";
     }
     return "";
@@ -256,13 +255,12 @@ FixResult fix_gaussian(const std::filesystem::path& path,
                                  {"%nprocshared=" + std::to_string(*config.max_cores), "\n"});
         result.changes.push_back("cores -> " + std::to_string(*config.max_cores));
     }
-    if (selection.memory && config.max_memory_bytes &&
+    if (selection.memory && config.gaussian_max_memory_bytes &&
         (!molecule.resources.memory_bytes || *molecule.resources.memory_bytes >
-            memory_limit_bytes(*config.max_memory_bytes,
-                               config.gaussian_memory_percent))) {
-        const std::uint64_t safe_memory = memory_limit_bytes(
-            *config.max_memory_bytes, config.gaussian_memory_percent);
-        const std::string directive = gaussian_memory_directive(safe_memory);
+            *config.gaussian_max_memory_bytes)) {
+        const std::uint64_t max_memory =
+            *config.gaussian_max_memory_bytes;
+        const std::string directive = gaussian_memory_directive(max_memory);
         bool found = false;
         const std::regex pattern(R"(%mem\s*=\s*(\d+)\s*[kmgt]?(?:i?[bw])?)",
                                  std::regex_constants::icase);
@@ -282,7 +280,7 @@ FixResult fix_gaussian(const std::filesystem::path& path,
         if (!found) lines.insert(lines.begin() + static_cast<std::ptrdiff_t>(insert),
                                  {directive, "\n"});
         result.changes.push_back(
-            "memory -> " + format_bytes(safe_memory));
+            "memory -> " + format_bytes(max_memory));
     }
     return result;
 }
@@ -318,13 +316,12 @@ FixResult fix_orca(const std::filesystem::path& path,
     const std::uint64_t cores = (selection.cores && config.max_cores &&
         (!molecule.resources.cores || *molecule.resources.cores > *config.max_cores))
         ? *config.max_cores : molecule.resources.cores.value_or(1);
-    const std::uint64_t safe_memory = config.max_memory_bytes
-        ? memory_limit_bytes(*config.max_memory_bytes,
-                             config.orca_memory_percent) : 0;
-    if (selection.memory && config.max_memory_bytes &&
+    const std::uint64_t max_memory = config.orca_max_memory_bytes
+        ? *config.orca_max_memory_bytes : 0;
+    if (selection.memory && config.orca_max_memory_bytes &&
         (!molecule.resources.memory_bytes ||
-         *molecule.resources.memory_bytes > safe_memory)) {
-        const std::uint64_t maxcore = safe_memory /
+         *molecule.resources.memory_bytes > max_memory)) {
+        const std::uint64_t maxcore = max_memory /
                                       (1024ULL * 1024ULL) / cores;
         if (maxcore == 0) return {{}, "memory limit is too small for the process count"};
         bool found = false;

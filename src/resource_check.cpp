@@ -18,18 +18,9 @@ std::string format_bytes(std::uint64_t bytes) {
     return output.str();
 }
 
-std::uint64_t memory_limit_bytes(std::uint64_t configured_bytes,
-                                 std::uint8_t percent) noexcept {
-    if (percent >= 100) return configured_bytes;
-    const std::uint64_t whole = configured_bytes / 100ULL;
-    const std::uint64_t remainder = configured_bytes % 100ULL;
-    return whole * percent + (remainder * percent) / 100ULL;
-}
-
 ResourceResult ResourceChecker::check(
     const ResourceRequest& request,
-    const UserConfig& limits,
-    std::uint8_t memory_percent
+    const ResourceLimits& limits
 ) const {
     ResourceResult result;
     if (limits.max_cores) {
@@ -53,21 +44,12 @@ ResourceResult ResourceChecker::check(
                 "no memory directive found"
             });
         } else {
-            const std::uint64_t safe_limit = memory_limit_bytes(
-                *limits.max_memory_bytes, memory_percent);
-            if (*request.memory_bytes > safe_limit) {
-                std::string limit_description =
-                    "maximum is " + format_bytes(safe_limit);
-                if (memory_percent < 100) {
-                    limit_description =
-                        "safe maximum is " + format_bytes(safe_limit) +
-                        " (" + std::to_string(memory_percent) +
-                        "% of configured memory)";
-                }
+            if (*request.memory_bytes > *limits.max_memory_bytes) {
                 result.diagnostics.push_back({
                     ResourceError::memory_exceeds_limit,
                     "requested " + format_bytes(*request.memory_bytes) +
-                    "; " + limit_description
+                    "; maximum is " +
+                    format_bytes(*limits.max_memory_bytes)
                 });
             }
         }

@@ -84,9 +84,8 @@ UserConfigResult parse_user_config(std::istream& input) {
         const std::string key = trim(line.substr(0, equals));
         const std::string value_text = trim(line.substr(equals + 1));
 
-        if (key != "max_cores" && key != "max_memory" &&
-            key != "gaussian_memory_percent" &&
-            key != "orca_memory_percent") {
+        if (key != "max_cores" && key != "gaussian_max_memory" &&
+            key != "orca_max_memory") {
             std::string message = "unknown configuration key '" + key + "'";
             if (key == "max_core") {
                 message += "; did you mean 'max_cores'?";
@@ -110,37 +109,26 @@ UserConfigResult parse_user_config(std::istream& input) {
                 return {{}, "configuration value for 'max_cores' is too large"};
             }
             config.max_cores = static_cast<std::uint32_t>(value);
-        } else if (key == "max_memory") {
-            if (value > std::numeric_limits<std::uint64_t>::max() / gibibyte) {
-                return {{}, "configuration value for 'max_memory' is too large"};
-            }
-            config.max_memory_bytes = value * gibibyte;
         } else {
-            if (value > 100) {
+            if (value > std::numeric_limits<std::uint64_t>::max() / gibibyte) {
                 return {{}, "configuration value for '" + key +
-                            "' must be between 1 and 100"};
+                            "' is too large"};
             }
-            const auto percent = static_cast<std::uint8_t>(value);
-            if (key == "gaussian_memory_percent") {
-                config.gaussian_memory_percent = percent;
+            if (key == "gaussian_max_memory") {
+                config.gaussian_max_memory_bytes = value * gibibyte;
             } else {
-                config.orca_memory_percent = percent;
+                config.orca_max_memory_bytes = value * gibibyte;
             }
         }
     }
     if (input.bad()) {
         return {{}, "cannot read user configuration"};
     }
-    if (!config.max_cores && !config.max_memory_bytes) {
-        return {{}, "user configuration contains no resource limits"};
-    }
-    if (config.max_memory_bytes) {
-        for (const char* key : {"gaussian_memory_percent",
-                                "orca_memory_percent"}) {
-            if (seen.find(key) == seen.end()) {
-                return {{}, "missing configuration key '" +
-                            std::string(key) + "'"};
-            }
+    for (const char* key : {"max_cores", "gaussian_max_memory",
+                            "orca_max_memory"}) {
+        if (seen.find(key) == seen.end()) {
+            return {{}, "missing configuration key '" +
+                        std::string(key) + "'"};
         }
     }
     return {config, ""};
@@ -192,9 +180,8 @@ bool write_default_user_config(
     output
         << "# qclint user resource limits\n"
         << "max_cores = 32       # maximum CPU cores\n"
-        << "max_memory = 64      # maximum memory in GiB\n"
-        << "gaussian_memory_percent = 100\n"
-        << "orca_memory_percent = 80\n";
+        << "gaussian_max_memory = 64 # maximum Gaussian memory in GiB\n"
+        << "orca_max_memory = 51     # maximum ORCA memory in GiB\n";
     output.close();
     if (!output) {
         error = "cannot write configuration '" + temporary.string() + "'";

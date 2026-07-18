@@ -78,39 +78,44 @@ int main() {
 
     std::istringstream configuration(
         "max_cores = 8 # maximum cores\n"
-        "max_memory = 4 # GiB\n"
-        "gaussian_memory_percent = 100\n"
-        "orca_memory_percent = 80\n"
+        "gaussian_max_memory = 4 # GiB\n"
+        "orca_max_memory = 3 # GiB\n"
     );
     const auto configured = qclint::parse_user_config(configuration);
     REQUIRE(configured.ok());
     REQUIRE(configured.config.max_cores == 8);
-    REQUIRE(configured.config.max_memory_bytes == 4ULL * 1024 * 1024 * 1024);
-    REQUIRE(configured.config.gaussian_memory_percent == 100);
-    REQUIRE(configured.config.orca_memory_percent == 80);
+    REQUIRE(configured.config.gaussian_max_memory_bytes ==
+            4ULL * 1024 * 1024 * 1024);
+    REQUIRE(configured.config.orca_max_memory_bytes ==
+            3ULL * 1024 * 1024 * 1024);
 
     std::istringstream missing_memory_policy(
-        "max_memory = 4\n"
-        "gaussian_memory_percent = 100\n"
+        "max_cores = 8\n"
+        "gaussian_max_memory = 4\n"
     );
     const auto missing_policy =
         qclint::parse_user_config(missing_memory_policy);
     REQUIRE(!missing_policy.ok());
-    REQUIRE(missing_policy.error.find("orca_memory_percent") !=
+    REQUIRE(missing_policy.error.find("orca_max_memory") !=
             std::string::npos);
 
-    std::istringstream invalid_memory_policy(
+    std::istringstream obsolete_memory_policy(
+        "max_cores = 8\n"
         "max_memory = 4\n"
-        "gaussian_memory_percent = 101\n"
-        "orca_memory_percent = 80\n"
+        "gaussian_max_memory = 4\n"
+        "orca_max_memory = 3\n"
     );
-    REQUIRE(!qclint::parse_user_config(invalid_memory_policy).ok());
+    REQUIRE(!qclint::parse_user_config(obsolete_memory_policy).ok());
 
     qclint::ResourceRequest resources;
     resources.cores = 9;
     resources.memory_bytes = 2ULL * 1024 * 1024 * 1024;
+    const qclint::ResourceLimits gaussian_limits{
+        configured.config.max_cores,
+        configured.config.gaussian_max_memory_bytes
+    };
     const auto resource_result =
-        qclint::ResourceChecker{}.check(resources, configured.config);
+        qclint::ResourceChecker{}.check(resources, gaussian_limits);
     REQUIRE(!resource_result.ok());
     REQUIRE(resource_result.diagnostics.size() == 1);
     REQUIRE(resource_result.diagnostics.front().code ==
@@ -120,15 +125,19 @@ int main() {
     orca_resources.cores = 1;
     orca_resources.memory_bytes =
         9ULL * 1024 * 1024 * 1024 / 10;
+    const qclint::ResourceLimits orca_limits{
+        configured.config.max_cores,
+        configured.config.orca_max_memory_bytes
+    };
     const auto orca_resource_result =
-        qclint::ResourceChecker{}.check(orca_resources, configured.config, 80);
+        qclint::ResourceChecker{}.check(orca_resources, orca_limits);
     REQUIRE(orca_resource_result.ok());
-    orca_resources.memory_bytes = 33ULL * 1024 * 1024 * 1024 / 10;
+    orca_resources.memory_bytes = 31ULL * 1024 * 1024 * 1024 / 10;
     const auto excessive_orca_resource_result =
-        qclint::ResourceChecker{}.check(orca_resources, configured.config, 80);
+        qclint::ResourceChecker{}.check(orca_resources, orca_limits);
     REQUIRE(!excessive_orca_resource_result.ok());
     REQUIRE(excessive_orca_resource_result.diagnostics.front().message.find(
-                "80% of configured memory") != std::string::npos);
+                "maximum is 3 GiB") != std::string::npos);
 
     std::istringstream malformed("# test\n\ntitle\n\nzero one\nH 0 0 0\n");
     REQUIRE(!qclint::parse_gaussian_input(malformed).ok());

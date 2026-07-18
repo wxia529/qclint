@@ -35,9 +35,8 @@ file contains simple integer limits:
 
 ```ini
 max_cores = 32       # maximum CPU cores
-max_memory = 64      # maximum memory in GiB
-gaussian_memory_percent = 100
-orca_memory_percent = 80
+gaussian_max_memory = 64 # maximum Gaussian memory in GiB
+orca_max_memory = 51     # maximum ORCA memory in GiB
 ```
 
 Expected charge and multiplicity values are optional:
@@ -64,10 +63,10 @@ ORCA support includes `! PALn`, one-line and multiline `%pal` blocks,
 `%maxcore`, inline `xyz`/`int`/`internal`/`gzmt` coordinates, `%coords`
 blocks, and external `xyzfile` geometries. Since ORCA `MaxCore` is specified
 in MB per process, qclint checks total requested memory as `MaxCore * nprocs`.
-Each program's configured percentage is applied to `max_memory`. ORCA defaults
-to 80% to leave room for allocations not covered by MaxCore. Gaussian defaults
-to 100% because `%Mem` is a whole-job memory limit. Both policies are explicit
-and user-configurable.
+Gaussian and ORCA have independent absolute GiB limits, so users can account
+for each program's memory behavior without interpreting percentages. ORCA
+memory fixes derive the per-process MaxCore value from `orca_max_memory` and
+the effective process count.
 
 Gaussian memory supports byte and word units (`KB`/`MB`/`GB`/`TB` and
 `KW`/`MW`/`GW`/`TW`), bare word counts, `%NProcShared`, and `%CPU` processor

@@ -1,4 +1,0 @@
-max_cores = 8
-max_memory = 1
-gaussian_memory_percent = 80
-orca_memory_percent = 80

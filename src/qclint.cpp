@@ -136,17 +136,16 @@ int show_config() {
     if (loaded.config.max_cores) {
         std::cout << "max_cores = " << *loaded.config.max_cores << '\n';
     }
-    if (loaded.config.max_memory_bytes) {
-        std::cout << "max_memory = "
-                  << *loaded.config.max_memory_bytes /
+    if (loaded.config.gaussian_max_memory_bytes) {
+        std::cout << "gaussian_max_memory = "
+                  << *loaded.config.gaussian_max_memory_bytes /
                          (1024ULL * 1024ULL * 1024ULL)
                   << '\n';
-        std::cout << "gaussian_memory_percent = "
-                  << static_cast<unsigned int>(
-                         loaded.config.gaussian_memory_percent)
-                  << '\n';
-        std::cout << "orca_memory_percent = "
-                  << static_cast<unsigned int>(loaded.config.orca_memory_percent)
+    }
+    if (loaded.config.orca_max_memory_bytes) {
+        std::cout << "orca_max_memory = "
+                  << *loaded.config.orca_max_memory_bytes /
+                         (1024ULL * 1024ULL * 1024ULL)
                   << '\n';
     }
     return 0;
@@ -413,8 +412,7 @@ ParsedDocument parse_document(const fs::path& path) {
 bool check_molecule(const ParsedMolecule& molecule,
                     const std::string& display_name,
                     const Options& options,
-                    const qclint::UserConfig& config,
-                    std::uint8_t memory_percent,
+                    const qclint::ResourceLimits& limits,
                     const std::string& expected_checkpoint) {
     bool declaration_matches = true;
     if (!expected_checkpoint.empty()) {
@@ -455,8 +453,7 @@ bool check_molecule(const ParsedMolecule& molecule,
         });
     }
     const qclint::ResourceResult resource_result =
-        qclint::ResourceChecker{}.check(molecule.resources, config,
-                                        memory_percent);
+        qclint::ResourceChecker{}.check(molecule.resources, limits);
 
     for (const auto& diagnostic : result.diagnostics) {
         std::cout << "[FAIL] " << display_name << ": " << diagnostic.message
@@ -525,11 +522,12 @@ bool check_file(
             display_name += " [job " + std::to_string(index + 1) + "]";
         }
         const bool is_orca = extension == ".inp";
-        const std::uint8_t memory_percent = is_orca
-            ? config.orca_memory_percent
-            : config.gaussian_memory_percent;
-        if (!check_molecule(document.jobs[index], display_name, options, config,
-                            memory_percent,
+        const qclint::ResourceLimits limits{
+            config.max_cores,
+            is_orca ? config.orca_max_memory_bytes
+                    : config.gaussian_max_memory_bytes
+        };
+        if (!check_molecule(document.jobs[index], display_name, options, limits,
                             extension == ".inp" ? "" :
                             path.stem().string() + ".chk")) {
             passed = false;

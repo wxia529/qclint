@@ -34,9 +34,8 @@ execute_process(
 )
 if(NOT show_result EQUAL 0 OR
    NOT show_output MATCHES "max_cores = 32" OR
-   NOT show_output MATCHES "max_memory = 64" OR
-   NOT show_output MATCHES "gaussian_memory_percent = 100" OR
-   NOT show_output MATCHES "orca_memory_percent = 80")
+   NOT show_output MATCHES "gaussian_max_memory = 64" OR
+   NOT show_output MATCHES "orca_max_memory = 51")
     message(FATAL_ERROR "config show did not report effective values")
 endif()
 
@@ -63,8 +62,7 @@ execute_process(
 file(READ "${CONFIG_FILE}" confirmed_contents)
 if(NOT confirm_result EQUAL 0 OR
    NOT confirmed_contents MATCHES "max_cores = 32" OR
-   NOT confirmed_contents MATCHES "max_memory = 64" OR
-   NOT confirmed_contents MATCHES "gaussian_memory_percent = 100" OR
-   NOT confirmed_contents MATCHES "orca_memory_percent = 80")
+   NOT confirmed_contents MATCHES "gaussian_max_memory = 64" OR
+   NOT confirmed_contents MATCHES "orca_max_memory = 51")
     message(FATAL_ERROR "Confirming overwrite did not replace the configuration")
 endif()
