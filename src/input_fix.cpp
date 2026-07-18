@@ -262,7 +262,7 @@ FixResult fix_gaussian(const std::filesystem::path& path,
         result.changes.push_back("cores -> " + std::to_string(*config.max_cores));
     }
     if (selection.memory && config.gaussian_max_memory_bytes &&
-        (!molecule.resources.memory_bytes || *molecule.resources.memory_bytes >
+        (!molecule.resources.memory_bytes || *molecule.resources.memory_bytes !=
             *config.gaussian_max_memory_bytes)) {
         const std::uint64_t max_memory =
             *config.gaussian_max_memory_bytes;
@@ -326,7 +326,7 @@ FixResult fix_orca(const std::filesystem::path& path,
         ? *config.orca_max_memory_bytes : 0;
     if (selection.memory && config.orca_max_memory_bytes &&
         (!molecule.resources.memory_bytes ||
-         *molecule.resources.memory_bytes > max_memory)) {
+         *molecule.resources.memory_bytes != max_memory)) {
         const std::uint64_t maxcore = max_memory /
                                       (1024ULL * 1024ULL) / cores;
         if (maxcore == 0) return {{}, "memory limit is too small for the process count"};

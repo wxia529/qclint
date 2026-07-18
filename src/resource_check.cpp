@@ -44,7 +44,14 @@ ResourceResult ResourceChecker::check(
                 "no memory directive found"
             });
         } else {
-            if (*request.memory_bytes > *limits.max_memory_bytes) {
+            if (*request.memory_bytes < *limits.max_memory_bytes) {
+                result.diagnostics.push_back({
+                    ResourceError::memory_below_limit,
+                    "requested " + format_bytes(*request.memory_bytes) +
+                    "; configured allocation is " +
+                    format_bytes(*limits.max_memory_bytes)
+                });
+            } else if (*request.memory_bytes > *limits.max_memory_bytes) {
                 result.diagnostics.push_back({
                     ResourceError::memory_exceeds_limit,
                     "requested " + format_bytes(*request.memory_bytes) +

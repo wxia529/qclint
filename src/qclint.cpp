@@ -552,6 +552,9 @@ std::string resource_code(qclint::ResourceError error) {
         case qclint::ResourceError::cores_exceed_limit:
             return "resource.cores";
         case qclint::ResourceError::missing_memory:
+            return "resource.memory";
+        case qclint::ResourceError::memory_below_limit:
+            return "resource.memory-underallocated";
         case qclint::ResourceError::memory_exceeds_limit:
             return "resource.memory";
     }
@@ -625,7 +628,10 @@ bool check_molecule(const ParsedMolecule& molecule,
             diagnostic.code == qclint::ResourceError::missing_cores ||
                     diagnostic.code == qclint::ResourceError::cores_exceed_limit
                 ? molecule.cores_line : molecule.memory_line;
-        file_diagnostic(path, line, "error", resource_code(diagnostic.code),
+        const std::string severity =
+            diagnostic.code == qclint::ResourceError::memory_below_limit
+                ? "warning" : "error";
+        file_diagnostic(path, line, severity, resource_code(diagnostic.code),
                         diagnostic.message, job);
     }
     if (declaration_matches && result.ok() && resource_result.ok()) {

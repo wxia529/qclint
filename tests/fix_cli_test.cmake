@@ -2,12 +2,43 @@ if(NOT DEFINED QCLINT_EXE OR NOT DEFINED TEST_ROOT OR
    NOT DEFINED GAUSSIAN_INPUT OR NOT DEFINED GAUSSIAN_CPU_INPUT OR
    NOT DEFINED ORCA_INPUT OR
    NOT DEFINED ORCA_COMMENTS_INPUT OR NOT DEFINED ORCA_INVALID_INPUT OR
-   NOT DEFINED STRICT_CONFIG OR NOT DEFINED ORCA_CONFIG)
+   NOT DEFINED NORMAL_CONFIG OR NOT DEFINED STRICT_CONFIG OR
+   NOT DEFINED ORCA_CONFIG)
     message(FATAL_ERROR "The fix CLI test is missing required variables")
 endif()
 
 file(REMOVE_RECURSE "${TEST_ROOT}")
 file(MAKE_DIRECTORY "${TEST_ROOT}")
+
+set(GAUSSIAN_UNDER_COPY "${TEST_ROOT}/water.gjf")
+file(COPY_FILE "${GAUSSIAN_INPUT}" "${GAUSSIAN_UNDER_COPY}")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E env "QCLINT_CONFIG=${NORMAL_CONFIG}"
+            "${QCLINT_EXE}" --fix memory "${GAUSSIAN_UNDER_COPY}"
+    RESULT_VARIABLE gaussian_under_result
+    ERROR_VARIABLE gaussian_under_error
+)
+file(READ "${GAUSSIAN_UNDER_COPY}" gaussian_under_contents)
+if(NOT gaussian_under_result EQUAL 0 OR
+   NOT gaussian_under_contents MATCHES "%mem=4GiB")
+    message(FATAL_ERROR
+            "Gaussian underallocated memory was not raised to the configured allocation:\n${gaussian_under_error}")
+endif()
+
+set(ORCA_UNDER_COPY "${TEST_ROOT}/underallocated.inp")
+file(COPY_FILE "${ORCA_INPUT}" "${ORCA_UNDER_COPY}")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E env "QCLINT_CONFIG=${ORCA_CONFIG}"
+            "${QCLINT_EXE}" --fix memory "${ORCA_UNDER_COPY}"
+    RESULT_VARIABLE orca_under_result
+    ERROR_VARIABLE orca_under_error
+)
+file(READ "${ORCA_UNDER_COPY}" orca_under_contents)
+if(NOT orca_under_result EQUAL 0 OR
+   NOT orca_under_contents MATCHES "%maxcore 3584")
+    message(FATAL_ERROR
+            "ORCA underallocated memory was not raised to the configured allocation:\n${orca_under_error}")
+endif()
 
 set(GAUSSIAN_CPU_COPY "${TEST_ROOT}/cpu.gjf")
 file(COPY_FILE "${GAUSSIAN_CPU_INPUT}" "${GAUSSIAN_CPU_COPY}")

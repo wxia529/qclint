@@ -21,6 +21,7 @@ enum class ResourceError {
     missing_cores,
     missing_memory,
     cores_exceed_limit,
+    memory_below_limit,
     memory_exceeds_limit,
 };
 
@@ -32,7 +33,14 @@ struct ResourceDiagnostic {
 struct ResourceResult {
     std::vector<ResourceDiagnostic> diagnostics;
 
-    bool ok() const noexcept { return diagnostics.empty(); }
+    bool ok() const noexcept {
+        for (const auto& diagnostic : diagnostics) {
+            if (diagnostic.code != ResourceError::memory_below_limit) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
 
 class ResourceChecker {

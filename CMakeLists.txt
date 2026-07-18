@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-set(QCLINT_VERSION "1.2.0" CACHE STRING "qclint release version")
+set(QCLINT_VERSION "1.3.0" CACHE STRING "qclint release version")
 project(qclint VERSION "${QCLINT_VERSION}" LANGUAGES CXX)
 
 include(GNUInstallDirs)
@@ -202,6 +202,7 @@ if(BUILD_TESTING)
                 -DORCA_INPUT=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/orca_simple.inp
                 -DORCA_COMMENTS_INPUT=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/orca_comments.inp
                 -DORCA_INVALID_INPUT=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/orca_invalid_state.inp
+                -DNORMAL_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/config
                 -DSTRICT_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/strict_config
                 -DORCA_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/orca_config
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/fix_cli_test.cmake

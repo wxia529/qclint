@@ -12,8 +12,9 @@ execute_process(
     ERROR_VARIABLE quiet_error
 )
 if(NOT quiet_result EQUAL 0 OR NOT quiet_output STREQUAL "" OR
-   NOT quiet_error STREQUAL "")
-    message(FATAL_ERROR "A successful default check was not silent")
+   NOT quiet_error MATCHES
+       ":3: warning\\[resource.memory-underallocated\\]: requested 2 GiB; configured allocation is 4 GiB")
+    message(FATAL_ERROR "Underallocated memory did not produce a warning")
 endif()
 
 execute_process(

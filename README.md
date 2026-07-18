@@ -63,10 +63,13 @@ ORCA support includes `! PALn`, one-line and multiline `%pal` blocks,
 `%maxcore`, inline `xyz`/`int`/`internal`/`gzmt` coordinates, `%coords`
 blocks, and external `xyzfile` geometries. Since ORCA `MaxCore` is specified
 in MB per process, qclint checks total requested memory as `MaxCore * nprocs`.
-Gaussian and ORCA have independent absolute GiB limits, so users can account
-for each program's memory behavior without interpreting percentages. ORCA
-memory fixes derive the per-process MaxCore value from `orca_max_memory` and
-the effective process count.
+Gaussian and ORCA have independent absolute GiB allocations, so users can
+account for each program's memory behavior without interpreting percentages.
+Requesting less memory produces an underallocation warning, an exact match is
+silent, and requesting more is an error. ORCA memory fixes derive the
+per-process MaxCore value from `orca_max_memory` and the effective process
+count. `--fix memory` sets either an underallocated or excessive request to the
+maximum usable configured allocation.
 
 Gaussian memory supports byte and word units (`KB`/`MB`/`GB`/`TB` and
 `KW`/`MW`/`GW`/`TW`), bare word counts, `%NProcShared`, and `%CPU` processor

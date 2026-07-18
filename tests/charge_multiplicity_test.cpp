@@ -117,9 +117,11 @@ int main() {
     const auto resource_result =
         qclint::ResourceChecker{}.check(resources, gaussian_limits);
     REQUIRE(!resource_result.ok());
-    REQUIRE(resource_result.diagnostics.size() == 1);
+    REQUIRE(resource_result.diagnostics.size() == 2);
     REQUIRE(resource_result.diagnostics.front().code ==
            qclint::ResourceError::cores_exceed_limit);
+    REQUIRE(resource_result.diagnostics.back().code ==
+           qclint::ResourceError::memory_below_limit);
 
     qclint::ResourceRequest orca_resources;
     orca_resources.cores = 1;
@@ -132,6 +134,14 @@ int main() {
     const auto orca_resource_result =
         qclint::ResourceChecker{}.check(orca_resources, orca_limits);
     REQUIRE(orca_resource_result.ok());
+    REQUIRE(orca_resource_result.diagnostics.size() == 1);
+    REQUIRE(orca_resource_result.diagnostics.front().code ==
+           qclint::ResourceError::memory_below_limit);
+    orca_resources.memory_bytes = 3ULL * 1024 * 1024 * 1024;
+    const auto exact_orca_resource_result =
+        qclint::ResourceChecker{}.check(orca_resources, orca_limits);
+    REQUIRE(exact_orca_resource_result.ok());
+    REQUIRE(exact_orca_resource_result.diagnostics.empty());
     orca_resources.memory_bytes = 31ULL * 1024 * 1024 * 1024 / 10;
     const auto excessive_orca_resource_result =
         qclint::ResourceChecker{}.check(orca_resources, orca_limits);
