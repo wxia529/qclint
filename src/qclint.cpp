@@ -129,7 +129,7 @@ void print_help(const char* program) {
         << "Check Gaussian and ORCA inputs against user resource limits and chemical rules.\n\n"
         << "Usage:\n"
         << "  " << program
-        << " [--charge N] [--multiplicity N] FILE_OR_DIRECTORY ...\n\n"
+        << " [--charge N] [--multiplicity N] FILE ...\n\n"
         << "  " << program << " config init\n\n"
         << "  " << program << " config show\n\n"
         << "Options:\n"
@@ -290,7 +290,7 @@ OptionStatus parse_options(int argc, char* argv[], Options& options) {
         options.paths.emplace_back(argument);
     }
     if (options.paths.empty()) {
-        tool_error("cli.argument", "provide at least one input file or directory");
+        tool_error("cli.argument", "provide at least one input file");
         return OptionStatus::error;
     }
     if (options.dry_run && !options.fixes.any()) {
@@ -326,77 +326,22 @@ InputCollection collect_inputs(const std::vector<fs::path>& paths,
     InputCollection result;
     std::set<fs::path> files;
     for (const auto& path : paths) {
+        if (!is_supported_input(path)) {
+            ++result.skipped_count;
+            if (record_skipped) result.skipped.push_back(path);
+            continue;
+        }
         std::error_code status_error;
-        if (fs::is_directory(path, status_error)) {
-            fs::directory_iterator iterator(path, status_error);
-            if (status_error) {
-                result.error = "cannot open directory '" + path.string() +
-                               "': " + status_error.message();
-                return result;
-            }
-            const fs::directory_iterator end;
-            while (iterator != end) {
-                const fs::directory_entry entry = *iterator;
-                if (!is_supported_input(entry.path())) {
-                    if (record_skipped) {
-                        std::error_code entry_error;
-                        if (entry.is_regular_file(entry_error)) {
-                            result.skipped.push_back(entry.path());
-                            ++result.skipped_count;
-                        }
-                        if (entry_error) {
-                            result.error = "cannot inspect '" +
-                                entry.path().string() + "': " +
-                                entry_error.message();
-                            return result;
-                        }
-                    }
-                    iterator.increment(status_error);
-                    if (status_error) {
-                        result.error = "cannot read directory '" +
-                            path.string() + "': " + status_error.message();
-                        return result;
-                    }
-                    continue;
-                }
-                std::error_code entry_error;
-                if (entry.is_regular_file(entry_error)) {
-                    files.insert(fs::absolute(entry.path()).lexically_normal());
-                }
-                if (entry_error) {
-                    result.error = "cannot inspect '" + entry.path().string() +
-                                   "': " + entry_error.message();
-                    return result;
-                }
-                iterator.increment(status_error);
-                if (status_error) {
-                    result.error = "cannot read directory '" + path.string() +
-                                   "': " + status_error.message();
-                    return result;
-                }
-            }
+        if (fs::is_regular_file(path, status_error)) {
+            files.insert(fs::absolute(path).lexically_normal());
         } else {
             if (status_error) {
                 result.error = "cannot inspect '" + path.string() + "': " +
                                status_error.message();
-                return result;
-            }
-            if (!is_supported_input(path)) {
-                ++result.skipped_count;
-                if (record_skipped) result.skipped.push_back(path);
-                continue;
-            }
-            if (fs::is_regular_file(path, status_error)) {
-                files.insert(fs::absolute(path).lexically_normal());
             } else {
                 result.error = "not a readable file: '" + path.string() + "'";
-                return result;
             }
-            if (status_error) {
-                result.error = "cannot inspect '" + path.string() + "': " +
-                               status_error.message();
-                return result;
-            }
+            return result;
         }
     }
     result.files.assign(files.begin(), files.end());

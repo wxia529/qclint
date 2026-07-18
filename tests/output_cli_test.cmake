@@ -1,7 +1,20 @@
 if(NOT DEFINED QCLINT_EXE OR NOT DEFINED INPUT_FILE OR
-   NOT DEFINED UNSUPPORTED_FILE OR NOT DEFINED NORMAL_CONFIG OR
+   NOT DEFINED UNSUPPORTED_FILE OR NOT DEFINED DIRECTORY_INPUT OR
+   NOT DEFINED NORMAL_CONFIG OR
    NOT DEFINED MISSING_CONFIG)
     message(FATAL_ERROR "The output CLI test is missing required variables")
+endif()
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E env "QCLINT_CONFIG=${MISSING_CONFIG}"
+            "${QCLINT_EXE}" "${DIRECTORY_INPUT}"
+    RESULT_VARIABLE directory_result
+    OUTPUT_VARIABLE directory_output
+    ERROR_VARIABLE directory_error
+)
+if(NOT directory_result EQUAL 0 OR NOT directory_output STREQUAL "" OR
+   NOT directory_error STREQUAL "")
+    message(FATAL_ERROR "A directory argument was scanned instead of skipped")
 endif()
 
 execute_process(

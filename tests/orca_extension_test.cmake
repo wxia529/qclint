@@ -7,7 +7,7 @@ endif()
 file(REMOVE_RECURSE "${TEST_ROOT}")
 file(MAKE_DIRECTORY "${TEST_ROOT}")
 
-foreach(extension IN ITEMS in orca)
+foreach(extension IN ITEMS inp in orca)
     set(INPUT_COPY "${TEST_ROOT}/calculation.${extension}")
     file(COPY_FILE "${INPUT_FILE}" "${INPUT_COPY}")
     execute_process(

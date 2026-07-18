@@ -44,7 +44,7 @@ Expected charge and multiplicity values are optional:
 ```sh
 build/qclint molecule.gjf
 build/qclint --charge 0 --multiplicity 3 molecule.gjf
-build/qclint --multiplicity 2 inputs/
+build/qclint --multiplicity 2 inputs/*.inp
 ```
 
 Fixes are selectable and composable:
@@ -52,8 +52,8 @@ Fixes are selectable and composable:
 ```sh
 build/qclint --fix chk molecule.gjf
 build/qclint --fix cores --fix memory calculation.inp
-build/qclint --fix-all inputs/
-build/qclint --fix-all --dry-run inputs/
+build/qclint --fix-all inputs/*.inp
+build/qclint --fix-all --dry-run inputs/*.inp
 ```
 
 Charge and multiplicity are check-only fields. They are never modified by
@@ -84,9 +84,11 @@ documents are fully checked but left unchanged when a fix cannot be proven safe.
 
 ## Output
 
-Successful checks are silent by default. Unsupported file extensions are
-discarded before opening the file or loading the user configuration. Diagnostics
-use a compiler-style format and are written to standard error:
+Successful checks are silent by default. Pass multiple files with shell
+wildcards; qclint does not scan directory arguments. Unsupported file extensions
+and directories are discarded before opening a file or loading the user
+configuration. Diagnostics use a compiler-style format and are written to
+standard error:
 
 ```text
 inputs/water.gjf:2: error[resource.cores]: requested 64 cores; maximum is 32

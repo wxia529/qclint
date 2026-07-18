@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-set(QCLINT_VERSION "1.3.0" CACHE STRING "qclint release version")
+set(QCLINT_VERSION "1.4.0" CACHE STRING "qclint release version")
 project(qclint VERSION "${QCLINT_VERSION}" LANGUAGES CXX)
 
 include(GNUInstallDirs)
@@ -87,13 +87,6 @@ if(BUILD_TESTING)
                           PRIVATE qclint_core qclint_gaussian qclint_orca)
     add_test(NAME charge_multiplicity COMMAND charge_multiplicity_test)
     add_test(
-        NAME qclint_cli_valid
-        COMMAND ${CMAKE_COMMAND} -E env
-                QCLINT_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/config
-                $<TARGET_FILE:qclint> --charge 0 --multiplicity 1
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/water.gjf
-    )
-    add_test(
         NAME qclint_cli_failures
         COMMAND ${CMAKE_COMMAND}
                 -DQCLINT_EXE=$<TARGET_FILE:qclint>
@@ -108,6 +101,7 @@ if(BUILD_TESTING)
                 -DQCLINT_EXE=$<TARGET_FILE:qclint>
                 -DINPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/water.gjf
                 -DUNSUPPORTED_FILE=${CMAKE_CURRENT_SOURCE_DIR}/README.md
+                -DDIRECTORY_INPUT=${CMAKE_CURRENT_SOURCE_DIR}/tests/data
                 -DNORMAL_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/config
                 -DMISSING_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/missing-output-config
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/output_cli_test.cmake
@@ -115,13 +109,6 @@ if(BUILD_TESTING)
     add_test(NAME qclint_version COMMAND $<TARGET_FILE:qclint> --version)
     set_tests_properties(qclint_version PROPERTIES
                          PASS_REGULAR_EXPRESSION "qclint ${PROJECT_VERSION}")
-    add_test(
-        NAME qclint_orca_simple
-        COMMAND ${CMAKE_COMMAND} -E env
-                QCLINT_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/orca_config
-                $<TARGET_FILE:qclint>
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/orca_simple.inp
-    )
     add_test(
         NAME qclint_orca_multiline
         COMMAND ${CMAKE_COMMAND} -E env
