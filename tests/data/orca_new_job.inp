@@ -1,0 +1,16 @@
+! UKS B3LYP def2-SVP PAL2
+%maxcore 1000
+* xyz 0 2
+O 0.0 0.0 0.0
+H 0.0 0.0 1.0
+*
+
+$new_job
+
+! RKS B3LYP def2-SVP PAL4
+%maxcore 1000
+* xyz 0 1
+O 0.0 0.0 0.0
+H 0.0 0.0 1.0
+H 0.0 1.0 0.0
+*

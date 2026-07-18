@@ -1,0 +1,15 @@
+! RKS B3LYP def2-SVP
+%maxcore 2000
+%pal
+  nprocs 8
+end
+%coords
+  CTyp xyz
+  Charge 0
+  Mult 1
+  coords
+    O 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    H 0.0 1.0 0.0
+  end
+end

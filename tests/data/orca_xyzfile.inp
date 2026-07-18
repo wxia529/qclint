@@ -1,0 +1,3 @@
+! UKS B3LYP def2-SVP PAL2
+%maxcore 1000
+* xyzfile 0 2 external.xyz

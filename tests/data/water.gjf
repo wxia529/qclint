@@ -1,0 +1,11 @@
+%chk=water.chk
+%nprocshared=4
+%mem=2GB
+#p b3lyp/6-31g(d)
+
+water
+
+0 1
+O  0.0 0.0 0.0
+H  0.0 0.0 1.0
+H  0.0 1.0 0.0

@@ -1,0 +1,29 @@
+%chk=gaussian_link1.chk
+%nprocshared=2
+%mem=2GB
+#p b3lyp/6-31g(d)
+
+water first
+
+0 1
+O 0.0 0.0 0.0
+H 0.0 0.0 1.0
+H 0.0 1.0 0.0
+
+--Link1--
+%chk=gaussian_link1.chk
+%nprocshared=4
+%mem=2GB
+#p ub3lyp/6-31g(d)
+
+OH second
+
+0 2
+O 0.0 0.0 0.0
+H 0.0 0.0 1.0
+
+--Link1--
+%chk=gaussian_link1.chk
+%nprocshared=4
+%mem=2GB
+#p b3lyp/6-31g(d) geom=allcheck guess=read

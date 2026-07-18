@@ -1,0 +1,10 @@
+%CPU=0-7
+%Mem=8GB
+#p b3lyp/6-31g(d)
+
+water with CPU affinity
+
+0 1
+O 0.0 0.0 0.0
+H 0.0 0.0 1.0
+H 0.0 1.0 0.0

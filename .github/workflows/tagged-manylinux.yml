@@ -1,0 +1,97 @@
+name: Release Linux package
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Build and package
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must have the form vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          package="qclint-${version}-linux-x86_64-glibc-2.17"
+
+          docker run --rm \
+            -e QCLINT_RELEASE_VERSION="$version" \
+            -e QCLINT_RELEASE_PACKAGE="$package" \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            quay.io/pypa/manylinux2014_x86_64:latest \
+            bash -lc '
+              set -euo pipefail
+
+              cmake --version
+              gcc --version
+              rm -rf build-manylinux dist
+              cmake -S . -B build-manylinux \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DQCLINT_VERSION="$QCLINT_RELEASE_VERSION" \
+                -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+              cmake --build build-manylinux --parallel
+              ctest --test-dir build-manylinux --output-on-failure
+
+              reported_version="$(./build-manylinux/qclint --version)"
+              if [[ "$reported_version" != "qclint $QCLINT_RELEASE_VERSION" ]]; then
+                echo "Version $QCLINT_RELEASE_VERSION does not match $reported_version" >&2
+                exit 1
+              fi
+
+              highest_glibc="$(readelf --version-info build-manylinux/qclint \
+                | grep -oE "GLIBC_[0-9.]+" \
+                | sed "s/GLIBC_//" \
+                | sort -Vu \
+                | tail -1)"
+              if [[ "$(printf "%s\n" "$highest_glibc" 2.17 | sort -V | tail -1)" != "2.17" ]]; then
+                echo "Binary requires glibc $highest_glibc, expected at most 2.17" >&2
+                exit 1
+              fi
+              if ldd build-manylinux/qclint | grep -Eq "libstdc\+\+|libgcc_s"; then
+                echo "C++ runtime libraries were not linked statically" >&2
+                exit 1
+              fi
+
+              cmake --install build-manylinux \
+                --prefix "dist/$QCLINT_RELEASE_PACKAGE"
+              tar -C dist -czf \
+                "dist/$QCLINT_RELEASE_PACKAGE.tar.gz" \
+                "$QCLINT_RELEASE_PACKAGE"
+              (cd dist && sha256sum \
+                "$QCLINT_RELEASE_PACKAGE.tar.gz" \
+                > "$QCLINT_RELEASE_PACKAGE.tar.gz.sha256")
+            '
+
+          echo "archive=dist/$package.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "checksum=dist/$package.tar.gz.sha256" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ARCHIVE: ${{ steps.package.outputs.archive }}
+          RELEASE_CHECKSUM: ${{ steps.package.outputs.checksum }}
+          RELEASE_VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "$RELEASE_ARCHIVE" \
+            "$RELEASE_CHECKSUM" \
+            --verify-tag \
+            --generate-notes \
+            --title "qclint $RELEASE_VERSION"
