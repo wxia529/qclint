@@ -13,9 +13,11 @@ execute_process(
             "${QCLINT_EXE}" "${INPUT_COPY}"
     RESULT_VARIABLE check_result
     OUTPUT_VARIABLE check_output
+    ERROR_VARIABLE check_error
 )
 if(NOT check_result EQUAL 1 OR
-   NOT check_output MATCHES "requested 2 GiB; maximum is 1 GiB")
+   NOT check_error MATCHES
+       "error\\[resource.memory\\]: requested 2 GiB; maximum is 1 GiB")
     message(FATAL_ERROR "Gaussian custom memory limit was not enforced")
 endif()
 
@@ -24,11 +26,12 @@ execute_process(
             "${QCLINT_EXE}" --fix memory "${INPUT_COPY}"
     RESULT_VARIABLE fix_result
     OUTPUT_VARIABLE fix_output
+    ERROR_VARIABLE fix_error
 )
 file(READ "${INPUT_COPY}" fixed_contents)
 if(NOT fix_result EQUAL 0 OR
    NOT fixed_contents MATCHES "%mem=1GiB")
     message(FATAL_ERROR
             "Gaussian custom memory limit was not fixed safely:\n"
-            "${fix_output}")
+            "${fix_output}${fix_error}")
 endif()

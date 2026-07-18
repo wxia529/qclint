@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-set(QCLINT_VERSION "1.1.0" CACHE STRING "qclint release version")
+set(QCLINT_VERSION "1.2.0" CACHE STRING "qclint release version")
 project(qclint VERSION "${QCLINT_VERSION}" LANGUAGES CXX)
 
 include(GNUInstallDirs)
@@ -102,6 +102,16 @@ if(BUILD_TESTING)
                 -DSTRICT_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/strict_config
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_failure_test.cmake
     )
+    add_test(
+        NAME qclint_cli_output
+        COMMAND ${CMAKE_COMMAND}
+                -DQCLINT_EXE=$<TARGET_FILE:qclint>
+                -DINPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/water.gjf
+                -DUNSUPPORTED_FILE=${CMAKE_CURRENT_SOURCE_DIR}/README.md
+                -DNORMAL_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/config
+                -DMISSING_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/missing-output-config
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/output_cli_test.cmake
+    )
     add_test(NAME qclint_version COMMAND $<TARGET_FILE:qclint> --version)
     set_tests_properties(qclint_version PROPERTIES
                          PASS_REGULAR_EXPRESSION "qclint ${PROJECT_VERSION}")
@@ -118,6 +128,16 @@ if(BUILD_TESTING)
                 QCLINT_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/orca_config
                 $<TARGET_FILE:qclint>
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/orca_multiline.inp
+    )
+    add_test(
+        NAME qclint_orca_extensions
+        COMMAND ${CMAKE_COMMAND}
+                -DQCLINT_EXE=$<TARGET_FILE:qclint>
+                -DINPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/orca_simple.inp
+                -DNORMAL_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/orca_config
+                -DSTRICT_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/tests/data/strict_config
+                -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/orca-extension-test
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/orca_extension_test.cmake
     )
     add_test(
         NAME qclint_orca_memory_limit

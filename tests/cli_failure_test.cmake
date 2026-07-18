@@ -11,7 +11,8 @@ execute_process(
     ERROR_VARIABLE state_error
 )
 if(NOT state_result EQUAL 1 OR
-   NOT state_output MATCHES "declared multiplicity 1; expected 2")
+   NOT state_error MATCHES
+       ": error\\[chem.multiplicity\\]: declared multiplicity 1; expected 2")
     message(FATAL_ERROR "Wrong multiplicity did not produce a lint failure")
 endif()
 
@@ -23,7 +24,9 @@ execute_process(
     ERROR_VARIABLE resource_error
 )
 if(NOT resource_result EQUAL 1 OR
-   NOT resource_output MATCHES "requested 4 cores; maximum is 2" OR
-   NOT resource_output MATCHES "requested 2 GiB; maximum is 1 GiB")
+   NOT resource_error MATCHES
+       ":2: error\\[resource.cores\\]: requested 4 cores; maximum is 2" OR
+   NOT resource_error MATCHES
+       ":3: error\\[resource.memory\\]: requested 2 GiB; maximum is 1 GiB")
     message(FATAL_ERROR "Resource limits did not produce a lint failure")
 endif()

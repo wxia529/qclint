@@ -13,7 +13,8 @@ execute_process(
     ERROR_VARIABLE missing_error
 )
 if(NOT missing_result EQUAL 2 OR
-   NOT missing_error MATCHES "User configuration not found")
+   NOT missing_error MATCHES
+       "error\\[config.not-found\\]: user configuration not found")
     message(FATAL_ERROR "Missing configuration did not produce the expected error")
 endif()
 

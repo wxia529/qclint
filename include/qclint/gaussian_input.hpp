@@ -22,6 +22,7 @@ struct GaussianMolecule {
     bool chemistry_available = true;
     bool uses_checkpoint_geometry = false;
     std::optional<std::string> checkpoint;
+    std::optional<std::size_t> checkpoint_line;
 };
 
 struct GaussianParseResult {

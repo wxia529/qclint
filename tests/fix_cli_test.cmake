@@ -111,10 +111,11 @@ execute_process(
             "${QCLINT_EXE}" --fix-all --dry-run "${DRY_RUN_COPY}"
     RESULT_VARIABLE dry_run_result
     OUTPUT_VARIABLE dry_run_output
+    ERROR_VARIABLE dry_run_error
 )
 file(READ "${DRY_RUN_COPY}" dry_run_after)
 if(NOT dry_run_result EQUAL 1 OR
-   NOT dry_run_output MATCHES "\\[PLAN\\]" OR
+   NOT dry_run_error MATCHES "note\\[fix.plan\\]" OR
    NOT dry_run_after STREQUAL dry_run_before)
     message(FATAL_ERROR "Dry-run modified the input")
 endif()

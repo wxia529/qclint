@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cctype>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -16,6 +17,10 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -27,6 +32,7 @@ struct Options {
     std::vector<fs::path> paths;
     qclint::FixSelection fixes;
     bool dry_run = false;
+    bool verbose = false;
 };
 
 struct ParsedMolecule {
@@ -34,10 +40,13 @@ struct ParsedMolecule {
     int charge = 0;
     int multiplicity = 1;
     qclint::ResourceRequest resources;
-    std::string error;
     bool chemistry_available = true;
     bool inherits_geometry = false;
     std::optional<std::string> checkpoint;
+    std::optional<std::size_t> checkpoint_line;
+    std::optional<std::size_t> charge_multiplicity_line;
+    std::optional<std::size_t> cores_line;
+    std::optional<std::size_t> memory_line;
 };
 
 struct ParsedDocument {
@@ -45,7 +54,68 @@ struct ParsedDocument {
     std::string error;
 };
 
+struct InputCollection {
+    std::vector<fs::path> files;
+    std::vector<fs::path> skipped;
+    std::size_t skipped_count = 0;
+    std::string error;
+};
+
+struct InputSection {
+    std::string contents;
+    std::size_t first_line = 1;
+};
+
 enum class OptionStatus { run, help, error };
+
+bool color_enabled() {
+#ifdef _WIN32
+    return false;
+#else
+    static const bool enabled = [] {
+        if (std::getenv("NO_COLOR") != nullptr) return false;
+        const char* term = std::getenv("TERM");
+        return (term == nullptr || std::string(term) != "dumb") &&
+               isatty(STDERR_FILENO) != 0;
+    }();
+    return enabled;
+#endif
+}
+
+std::string severity_label(const std::string& severity) {
+    if (!color_enabled()) return severity;
+    const char* color = "\033[36m";
+    if (severity == "error") color = "\033[31m";
+    else if (severity == "warning") color = "\033[33m";
+    else if (severity == "fixed") color = "\033[32m";
+    return std::string(color) + severity + "\033[0m";
+}
+
+void tool_error(const std::string& code, const std::string& message) {
+    std::cerr << "qclint: " << severity_label("error") << '[' << code
+              << "]: " << message << '\n';
+}
+
+std::string display_path(const fs::path& path) {
+    std::error_code error;
+    const fs::path relative = fs::relative(path, fs::current_path(), error);
+    if (!error && !relative.empty()) return relative.generic_string();
+    return path.generic_string();
+}
+
+void file_diagnostic(const fs::path& path,
+                     const std::optional<std::size_t>& line,
+                     const std::string& severity,
+                     const std::string& code,
+                     const std::string& message,
+                     const std::optional<std::size_t>& job = std::nullopt) {
+    std::cerr << display_path(path);
+    if (line && *line > 0) std::cerr << ':' << *line;
+    std::cerr << ": " << severity_label(severity) << '[' << code
+              << "]: " << message;
+    if (job) std::cerr << " (job " << *job << ')';
+    std::cerr << '\n';
+}
 
 bool parse_integer(const std::string& text, int& value) {
     const char* begin = text.data();
@@ -68,6 +138,7 @@ void print_help(const char* program) {
         << "  --fix ITEM        Fix one item: chk, cores, memory\n"
         << "  --fix-all         Fix every applicable item\n"
         << "  --dry-run         Preview fixes without modifying files\n"
+        << "  -v, --verbose     Show passed and skipped files and a summary\n"
         << "  -h, --help        Show this help message\n\n"
         << "  --version         Show the program version\n\n"
         << "Without an expected value, the value declared by each input is checked.\n";
@@ -76,15 +147,15 @@ void print_help(const char* program) {
 int initialize_config() {
     const fs::path path = qclint::user_config_path();
     if (path.empty()) {
-        std::cerr << "[ERROR] Cannot determine the user configuration path.\n";
+        tool_error("config.path", "cannot determine the user configuration path");
         return 2;
     }
 
     std::error_code fs_error;
     const bool exists = fs::exists(path, fs_error);
     if (fs_error) {
-        std::cerr << "[ERROR] Cannot inspect '" << path.string()
-                  << "': " << fs_error.message() << '\n';
+        tool_error("config.read", "cannot inspect '" + path.string() +
+                   "': " + fs_error.message());
         return 2;
     }
 
@@ -114,7 +185,7 @@ int initialize_config() {
 
     std::string error;
     if (!qclint::write_default_user_config(path, overwrite, error)) {
-        std::cerr << "[ERROR] " << error << '\n';
+        tool_error("config.write", error);
         return 2;
     }
     std::cout << "Configuration written to '" << path.string() << "'.\n";
@@ -124,12 +195,12 @@ int initialize_config() {
 int show_config() {
     const fs::path path = qclint::user_config_path();
     if (path.empty() || !fs::is_regular_file(path)) {
-        std::cerr << "[ERROR] User configuration not found.\n";
+        tool_error("config.not-found", "user configuration not found");
         return 2;
     }
     const qclint::UserConfigResult loaded = qclint::load_user_config(path);
     if (!loaded.ok()) {
-        std::cerr << "[ERROR] " << loaded.error << '\n';
+        tool_error("config.invalid", loaded.error);
         return 2;
     }
     std::cout << "config_path = " << path.string() << '\n';
@@ -169,13 +240,13 @@ OptionStatus parse_options(int argc, char* argv[], Options& options) {
         }
         if (argument == "--charge" || argument == "--multiplicity") {
             if (++index == argc) {
-                std::cerr << "[ERROR] " << argument << " requires an integer\n";
+                tool_error("cli.argument", argument + " requires an integer");
                 return OptionStatus::error;
             }
             int value = 0;
             if (!parse_integer(argv[index], value)) {
-                std::cerr << "[ERROR] invalid integer for " << argument
-                          << ": " << argv[index] << '\n';
+                tool_error("cli.argument", "invalid integer for " + argument +
+                           ": " + argv[index]);
                 return OptionStatus::error;
             }
             if (argument == "--charge") {
@@ -187,7 +258,7 @@ OptionStatus parse_options(int argc, char* argv[], Options& options) {
         }
         if (argument == "--fix") {
             if (++index == argc) {
-                std::cerr << "[ERROR] --fix requires an item\n";
+                tool_error("cli.argument", "--fix requires an item");
                 return OptionStatus::error;
             }
             const std::string item = argv[index];
@@ -195,7 +266,7 @@ OptionStatus parse_options(int argc, char* argv[], Options& options) {
             else if (item == "cores") options.fixes.cores = true;
             else if (item == "memory") options.fixes.memory = true;
             else {
-                std::cerr << "[ERROR] unknown fix item: " << item << '\n';
+                tool_error("cli.argument", "unknown fix item: " + item);
                 return OptionStatus::error;
             }
             continue;
@@ -208,111 +279,128 @@ OptionStatus parse_options(int argc, char* argv[], Options& options) {
             options.dry_run = true;
             continue;
         }
+        if (argument == "-v" || argument == "--verbose") {
+            options.verbose = true;
+            continue;
+        }
         if (!argument.empty() && argument.front() == '-') {
-            std::cerr << "[ERROR] unknown option: " << argument << '\n';
+            tool_error("cli.argument", "unknown option: " + argument);
             return OptionStatus::error;
         }
         options.paths.emplace_back(argument);
     }
     if (options.paths.empty()) {
-        std::cerr << "[ERROR] provide at least one input file or directory\n";
+        tool_error("cli.argument", "provide at least one input file or directory");
         return OptionStatus::error;
     }
     if (options.dry_run && !options.fixes.any()) {
-        std::cerr << "[ERROR] --dry-run requires --fix or --fix-all\n";
+        tool_error("cli.argument", "--dry-run requires --fix or --fix-all");
         return OptionStatus::error;
     }
     return OptionStatus::run;
 }
 
-std::vector<fs::path> collect_inputs(
-    const std::vector<fs::path>& paths,
-    std::string& error
-) {
+std::string lowercase_extension(const fs::path& path) {
+    std::string extension = path.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+                   [](unsigned char character) {
+                       return static_cast<char>(std::tolower(character));
+                   });
+    return extension;
+}
+
+bool is_supported_input(const fs::path& path) {
+    const std::string extension = lowercase_extension(path);
+    return extension == ".gjf" || extension == ".com" ||
+           extension == ".inp" || extension == ".in" ||
+           extension == ".orca";
+}
+
+bool is_orca_extension(const std::string& extension) {
+    return extension == ".inp" || extension == ".in" ||
+           extension == ".orca";
+}
+
+InputCollection collect_inputs(const std::vector<fs::path>& paths,
+                               bool record_skipped) {
+    InputCollection result;
     std::set<fs::path> files;
     for (const auto& path : paths) {
         std::error_code status_error;
         if (fs::is_directory(path, status_error)) {
             fs::directory_iterator iterator(path, status_error);
             if (status_error) {
-                error = "cannot open directory '" + path.string() + "'";
-                return {};
+                result.error = "cannot open directory '" + path.string() +
+                               "': " + status_error.message();
+                return result;
             }
             const fs::directory_iterator end;
             while (iterator != end) {
                 const fs::directory_entry entry = *iterator;
-                std::string extension = entry.path().extension().string();
-                std::transform(extension.begin(), extension.end(),
-                               extension.begin(), [](unsigned char character) {
-                    return static_cast<char>(std::tolower(character));
-                });
+                if (!is_supported_input(entry.path())) {
+                    if (record_skipped) {
+                        std::error_code entry_error;
+                        if (entry.is_regular_file(entry_error)) {
+                            result.skipped.push_back(entry.path());
+                            ++result.skipped_count;
+                        }
+                        if (entry_error) {
+                            result.error = "cannot inspect '" +
+                                entry.path().string() + "': " +
+                                entry_error.message();
+                            return result;
+                        }
+                    }
+                    iterator.increment(status_error);
+                    if (status_error) {
+                        result.error = "cannot read directory '" +
+                            path.string() + "': " + status_error.message();
+                        return result;
+                    }
+                    continue;
+                }
                 std::error_code entry_error;
-                if (entry.is_regular_file(entry_error) &&
-                    (extension == ".gjf" || extension == ".com" ||
-                     extension == ".inp")) {
+                if (entry.is_regular_file(entry_error)) {
                     files.insert(fs::absolute(entry.path()).lexically_normal());
                 }
                 if (entry_error) {
-                    error = "cannot inspect '" + entry.path().string() +
-                            "': " + entry_error.message();
-                    return {};
+                    result.error = "cannot inspect '" + entry.path().string() +
+                                   "': " + entry_error.message();
+                    return result;
                 }
                 iterator.increment(status_error);
                 if (status_error) {
-                    error = "cannot read directory '" + path.string() +
-                            "': " + status_error.message();
-                    return {};
+                    result.error = "cannot read directory '" + path.string() +
+                                   "': " + status_error.message();
+                    return result;
                 }
             }
-        } else if (fs::is_regular_file(path, status_error)) {
-            files.insert(fs::absolute(path).lexically_normal());
         } else {
-            error = "not a readable file or directory: '" + path.string() + "'";
-            return {};
+            if (status_error) {
+                result.error = "cannot inspect '" + path.string() + "': " +
+                               status_error.message();
+                return result;
+            }
+            if (!is_supported_input(path)) {
+                ++result.skipped_count;
+                if (record_skipped) result.skipped.push_back(path);
+                continue;
+            }
+            if (fs::is_regular_file(path, status_error)) {
+                files.insert(fs::absolute(path).lexically_normal());
+            } else {
+                result.error = "not a readable file: '" + path.string() + "'";
+                return result;
+            }
+            if (status_error) {
+                result.error = "cannot inspect '" + path.string() + "': " +
+                               status_error.message();
+                return result;
+            }
         }
     }
-    return {files.begin(), files.end()};
-}
-
-ParsedMolecule parse_molecule(const fs::path& path) {
-    std::string extension = path.extension().string();
-    std::transform(extension.begin(), extension.end(), extension.begin(),
-                   [](unsigned char character) {
-                       return static_cast<char>(std::tolower(character));
-                   });
-    if (extension == ".inp") {
-        const qclint::OrcaParseResult parsed = qclint::parse_orca_file(path);
-        if (!parsed.ok()) return {{}, 0, 1, {}, parsed.error, false, false,
-                                  std::nullopt};
-        return {
-            parsed.molecule.total_nuclear_charge,
-            parsed.molecule.charge,
-            parsed.molecule.multiplicity,
-            parsed.molecule.resources,
-            "",
-            parsed.molecule.chemistry_available,
-            false,
-            std::nullopt
-        };
-    }
-    if (extension == ".gjf" || extension == ".com") {
-        const qclint::GaussianParseResult parsed =
-            qclint::parse_gaussian_file(path);
-        if (!parsed.ok()) return {{}, 0, 1, {}, parsed.error, false, false,
-                                  std::nullopt};
-        return {
-            parsed.molecule.total_nuclear_charge,
-            parsed.molecule.charge,
-            parsed.molecule.multiplicity,
-            parsed.molecule.resources,
-            "",
-            parsed.molecule.chemistry_available,
-            parsed.molecule.uses_checkpoint_geometry,
-            parsed.molecule.checkpoint
-        };
-    }
-    return {{}, 0, 1, {}, "unsupported input extension '" + extension + "'",
-            false, false, std::nullopt};
+    result.files.assign(files.begin(), files.end());
+    return result;
 }
 
 std::string trim(const std::string& value) {
@@ -322,63 +410,100 @@ std::string trim(const std::string& value) {
     return value.substr(first, last - first + 1);
 }
 
-std::vector<std::string> split_jobs(const std::string& contents,
-                                    const std::string& marker) {
-    std::vector<std::string> jobs(1);
+std::vector<InputSection> split_jobs(const std::string& contents,
+                                     const std::string& marker) {
+    std::vector<InputSection> jobs(1);
     std::istringstream input(contents);
     std::string line;
+    std::size_t line_number = 0;
     while (std::getline(input, line)) {
+        ++line_number;
         std::string normalized = trim(line);
         std::transform(normalized.begin(), normalized.end(), normalized.begin(),
                        [](unsigned char character) {
                            return static_cast<char>(std::tolower(character));
                        });
         if (normalized == marker) {
-            jobs.emplace_back();
+            jobs.push_back({"", line_number + 1});
         } else {
-            jobs.back() += line + "\n";
+            jobs.back().contents += line + "\n";
         }
     }
     return jobs;
 }
 
+std::optional<std::size_t> global_line(
+    const std::optional<std::size_t>& zero_based_line,
+    std::size_t section_first_line
+) {
+    if (!zero_based_line) return std::nullopt;
+    return section_first_line + *zero_based_line;
+}
+
+ParsedMolecule convert_gaussian(const qclint::GaussianMolecule& molecule,
+                                std::size_t section_first_line) {
+    ParsedMolecule result;
+    result.total_nuclear_charge = molecule.total_nuclear_charge;
+    result.charge = molecule.charge;
+    result.multiplicity = molecule.multiplicity;
+    result.resources = molecule.resources;
+    result.chemistry_available = molecule.chemistry_available;
+    result.inherits_geometry = molecule.uses_checkpoint_geometry;
+    result.checkpoint = molecule.checkpoint;
+    result.checkpoint_line = global_line(molecule.checkpoint_line,
+                                         section_first_line);
+    if (molecule.charge_multiplicity_line > 0) {
+        result.charge_multiplicity_line = section_first_line +
+            molecule.charge_multiplicity_line - 1;
+    }
+    result.cores_line = global_line(molecule.cores_line, section_first_line);
+    result.memory_line = global_line(molecule.memory_line, section_first_line);
+    return result;
+}
+
+ParsedMolecule convert_orca(const qclint::OrcaMolecule& molecule,
+                            std::size_t section_first_line) {
+    ParsedMolecule result;
+    result.total_nuclear_charge = molecule.total_nuclear_charge;
+    result.charge = molecule.charge;
+    result.multiplicity = molecule.multiplicity;
+    result.resources = molecule.resources;
+    result.chemistry_available = molecule.chemistry_available;
+    if (molecule.charge_multiplicity_line > 0) {
+        result.charge_multiplicity_line = section_first_line +
+            molecule.charge_multiplicity_line - 1;
+    }
+    result.cores_line = global_line(molecule.cores_line, section_first_line);
+    result.memory_line = global_line(molecule.memory_line, section_first_line);
+    return result;
+}
+
 ParsedDocument parse_document(const fs::path& path) {
-    std::string extension = path.extension().string();
-    std::transform(extension.begin(), extension.end(), extension.begin(),
-                   [](unsigned char character) {
-                       return static_cast<char>(std::tolower(character));
-                   });
-    const std::string marker = extension == ".inp" ? "$new_job" : "--link1--";
+    const std::string extension = lowercase_extension(path);
+    const std::string marker = is_orca_extension(extension)
+        ? "$new_job" : "--link1--";
     std::ifstream input(path, std::ios::binary);
     if (!input) return {{}, "cannot open '" + path.string() + "'"};
     std::ostringstream buffer;
     buffer << input.rdbuf();
-    const std::vector<std::string> sections = split_jobs(buffer.str(), marker);
-    if (sections.size() == 1) {
-        ParsedMolecule molecule = parse_molecule(path);
-        if (!molecule.error.empty()) return {{}, molecule.error};
-        return {{molecule}, ""};
-    }
+    if (input.bad()) return {{}, "cannot read '" + path.string() + "'"};
+    const std::vector<InputSection> sections = split_jobs(buffer.str(), marker);
 
     ParsedDocument document;
     for (std::size_t index = 0; index < sections.size(); ++index) {
-        if (trim(sections[index]).empty()) {
+        if (trim(sections[index].contents).empty()) {
             return {{}, "empty job " + std::to_string(index + 1)};
         }
-        std::istringstream section(sections[index]);
-        if (extension == ".inp") {
+        std::istringstream section(sections[index].contents);
+        if (is_orca_extension(extension)) {
             const qclint::OrcaParseResult parsed =
                 qclint::parse_orca_input(section, path.parent_path());
             if (!parsed.ok()) {
                 return {{}, "job " + std::to_string(index + 1) + ": " +
                             parsed.error};
             }
-            document.jobs.push_back({parsed.molecule.total_nuclear_charge,
-                                     parsed.molecule.charge,
-                                     parsed.molecule.multiplicity,
-                                     parsed.molecule.resources, "",
-                                     parsed.molecule.chemistry_available,
-                                     false, std::nullopt});
+            document.jobs.push_back(convert_orca(
+                parsed.molecule, sections[index].first_line));
         } else {
             const qclint::GaussianParseResult parsed =
                 qclint::parse_gaussian_input(section);
@@ -386,13 +511,8 @@ ParsedDocument parse_document(const fs::path& path) {
                 return {{}, "job " + std::to_string(index + 1) + ": " +
                             parsed.error};
             }
-            ParsedMolecule job{parsed.molecule.total_nuclear_charge,
-                               parsed.molecule.charge,
-                               parsed.molecule.multiplicity,
-                               parsed.molecule.resources, "",
-                               parsed.molecule.chemistry_available,
-                               parsed.molecule.uses_checkpoint_geometry,
-                               parsed.molecule.checkpoint};
+            ParsedMolecule job = convert_gaussian(
+                parsed.molecule, sections[index].first_line);
             if (job.inherits_geometry && !document.jobs.empty() &&
                 document.jobs.back().chemistry_available) {
                 job.total_nuclear_charge =
@@ -409,37 +529,77 @@ ParsedDocument parse_document(const fs::path& path) {
     return document;
 }
 
+std::string chemistry_code(qclint::ChargeMultiplicityError error) {
+    switch (error) {
+        case qclint::ChargeMultiplicityError::negative_nuclear_charge:
+            return "chem.nuclear-charge";
+        case qclint::ChargeMultiplicityError::electron_count_overflow:
+            return "chem.electron-count";
+        case qclint::ChargeMultiplicityError::non_positive_multiplicity:
+        case qclint::ChargeMultiplicityError::multiplicity_too_large:
+            return "chem.multiplicity";
+        case qclint::ChargeMultiplicityError::negative_electron_count:
+            return "chem.charge";
+        case qclint::ChargeMultiplicityError::incompatible_parity:
+            return "chem.multiplicity-parity";
+    }
+    return "chem.invalid";
+}
+
+std::string resource_code(qclint::ResourceError error) {
+    switch (error) {
+        case qclint::ResourceError::missing_cores:
+        case qclint::ResourceError::cores_exceed_limit:
+            return "resource.cores";
+        case qclint::ResourceError::missing_memory:
+        case qclint::ResourceError::memory_exceeds_limit:
+            return "resource.memory";
+    }
+    return "resource.invalid";
+}
+
 bool check_molecule(const ParsedMolecule& molecule,
-                    const std::string& display_name,
+                    const fs::path& path,
                     const Options& options,
                     const qclint::ResourceLimits& limits,
-                    const std::string& expected_checkpoint) {
+                    const std::string& expected_checkpoint,
+                    const std::optional<std::size_t>& job) {
     bool declaration_matches = true;
     if (!expected_checkpoint.empty()) {
         if (!molecule.checkpoint) {
-            std::cout << "[FAIL] " << display_name
-                      << ": no %chk directive found\n";
+            file_diagnostic(path, std::nullopt, "error",
+                            "gaussian.checkpoint",
+                            "no %chk directive found", job);
             declaration_matches = false;
         } else if (fs::path(*molecule.checkpoint).filename().string() !=
                    expected_checkpoint) {
-            std::cout << "[FAIL] " << display_name << ": checkpoint "
-                      << *molecule.checkpoint << "; expected "
-                      << expected_checkpoint << '\n';
+            file_diagnostic(path, molecule.checkpoint_line, "error",
+                            "gaussian.checkpoint",
+                            "expected " + expected_checkpoint + "; found " +
+                                *molecule.checkpoint,
+                            job);
             declaration_matches = false;
         }
     }
     if (molecule.chemistry_available && options.expected_charge &&
         molecule.charge != *options.expected_charge) {
-        std::cout << "[FAIL] " << display_name << ": declared charge "
-                  << molecule.charge << "; expected "
-                  << *options.expected_charge << '\n';
+        file_diagnostic(path, molecule.charge_multiplicity_line, "error",
+                        "chem.charge",
+                        "declared charge " + std::to_string(molecule.charge) +
+                            "; expected " +
+                            std::to_string(*options.expected_charge),
+                        job);
         declaration_matches = false;
     }
     if (molecule.chemistry_available && options.expected_multiplicity &&
         molecule.multiplicity != *options.expected_multiplicity) {
-        std::cout << "[FAIL] " << display_name << ": declared multiplicity "
-                  << molecule.multiplicity << "; expected "
-                  << *options.expected_multiplicity << '\n';
+        file_diagnostic(
+            path, molecule.charge_multiplicity_line, "error",
+            "chem.multiplicity",
+            "declared multiplicity " + std::to_string(molecule.multiplicity) +
+                "; expected " +
+                std::to_string(*options.expected_multiplicity),
+            job);
         declaration_matches = false;
     }
 
@@ -456,29 +616,24 @@ bool check_molecule(const ParsedMolecule& molecule,
         qclint::ResourceChecker{}.check(molecule.resources, limits);
 
     for (const auto& diagnostic : result.diagnostics) {
-        std::cout << "[FAIL] " << display_name << ": " << diagnostic.message
-                  << " (electrons=" << result.electron_count
-                  << ", charge=" << selected_charge
-                  << ", multiplicity=" << selected_multiplicity << ")\n";
+        file_diagnostic(path, molecule.charge_multiplicity_line, "error",
+                        chemistry_code(diagnostic.code), diagnostic.message,
+                        job);
     }
     for (const auto& diagnostic : resource_result.diagnostics) {
-        std::cout << "[FAIL] " << display_name << ": "
-                  << diagnostic.message << '\n';
+        const std::optional<std::size_t> line =
+            diagnostic.code == qclint::ResourceError::missing_cores ||
+                    diagnostic.code == qclint::ResourceError::cores_exceed_limit
+                ? molecule.cores_line : molecule.memory_line;
+        file_diagnostic(path, line, "error", resource_code(diagnostic.code),
+                        diagnostic.message, job);
     }
     if (declaration_matches && result.ok() && resource_result.ok()) {
         if (!molecule.chemistry_available) {
-            std::cout << "[INFO] " << display_name
-                      << ": chemistry is generated dynamically and was not checked\n";
+            file_diagnostic(path, std::nullopt, "warning", "chem.unchecked",
+                            "generated geometry cannot be checked statically",
+                            job);
         }
-        std::cout << "[ OK ] " << display_name << ": electrons="
-                  << (molecule.chemistry_available
-                      ? std::to_string(result.electron_count) : "n/a")
-                  << ", charge="
-                  << (molecule.chemistry_available
-                      ? std::to_string(selected_charge) : "n/a")
-                  << ", multiplicity="
-                  << (molecule.chemistry_available
-                      ? std::to_string(selected_multiplicity) : "n/a") << '\n';
         return true;
     }
     return false;
@@ -494,44 +649,53 @@ bool check_file(
             path, options.fixes, config, options.dry_run
         );
         if (!fixed.ok()) {
-            std::cout << "[ERROR] " << path.filename().string() << ": "
-                      << fixed.error << '\n';
+            file_diagnostic(path, std::nullopt, "error", "fix.failed",
+                            fixed.error);
             return false;
         }
         for (const auto& change : fixed.changes) {
-            std::cout << (options.dry_run ? "[PLAN] " : "[FIX ] ")
-                      << path.filename().string() << ": "
-                      << change << '\n';
+            std::string code = "fix.input";
+            if (change.find("checkpoint") != std::string::npos) {
+                code = "gaussian.checkpoint";
+            } else if (change.find("core") != std::string::npos) {
+                code = "resource.cores";
+            } else if (change.find("memory") != std::string::npos ||
+                       change.find("MaxCore") != std::string::npos) {
+                code = "resource.memory";
+            }
+            file_diagnostic(path, std::nullopt,
+                            options.dry_run ? "note" : "fixed",
+                            options.dry_run ? "fix.plan" : code,
+                            options.dry_run ? "would apply " + change : change);
         }
     }
     const ParsedDocument document = parse_document(path);
     if (!document.error.empty()) {
-        std::cout << "[ERROR] " << path.filename().string() << ": "
-                  << document.error << '\n';
+        file_diagnostic(path, std::nullopt, "error",
+                        is_orca_extension(lowercase_extension(path))
+                            ? "parse.orca" : "parse.gaussian",
+                        document.error);
         return false;
     }
     bool passed = true;
-    std::string extension = path.extension().string();
-    std::transform(extension.begin(), extension.end(), extension.begin(),
-                   [](unsigned char character) {
-                       return static_cast<char>(std::tolower(character));
-                   });
+    const std::string extension = lowercase_extension(path);
     for (std::size_t index = 0; index < document.jobs.size(); ++index) {
-        std::string display_name = path.filename().string();
-        if (document.jobs.size() > 1) {
-            display_name += " [job " + std::to_string(index + 1) + "]";
-        }
-        const bool is_orca = extension == ".inp";
+        const bool is_orca = is_orca_extension(extension);
         const qclint::ResourceLimits limits{
             config.max_cores,
             is_orca ? config.orca_max_memory_bytes
                     : config.gaussian_max_memory_bytes
         };
-        if (!check_molecule(document.jobs[index], display_name, options, limits,
-                            extension == ".inp" ? "" :
-                            path.stem().string() + ".chk")) {
+        const std::optional<std::size_t> job = document.jobs.size() > 1
+            ? std::optional<std::size_t>(index + 1) : std::nullopt;
+        if (!check_molecule(document.jobs[index], path, options, limits,
+                            is_orca ? "" :
+                            path.stem().string() + ".chk", job)) {
             passed = false;
         }
+    }
+    if (passed && options.verbose) {
+        file_diagnostic(path, std::nullopt, "note", "check.ok", "passed");
     }
     return passed;
 }
@@ -550,8 +714,8 @@ int main(int argc, char* argv[]) {
         if (argc == 3 && std::string(argv[2]) == "show") {
             return show_config();
         }
-        std::cerr << "[ERROR] Usage: " << argv[0]
-                  << " config {init|show}\n";
+        tool_error("cli.argument", std::string("usage: ") + argv[0] +
+                   " config {init|show}");
         return 2;
     }
 
@@ -561,46 +725,76 @@ int main(int argc, char* argv[]) {
         return option_status == OptionStatus::help ? 0 : 2;
     }
 
+    const InputCollection inputs = collect_inputs(options.paths,
+                                                  options.verbose);
+    if (!inputs.error.empty()) {
+        tool_error("input.discovery", inputs.error);
+        return 2;
+    }
+    if (options.verbose) {
+        for (const auto& skipped : inputs.skipped) {
+            file_diagnostic(skipped, std::nullopt, "note", "input.skipped",
+                            "unsupported extension " +
+                                lowercase_extension(skipped));
+        }
+    }
+    if (inputs.files.empty()) {
+        if (options.verbose) {
+            std::cerr << "qclint: checked=0 passed=0 failed=0 skipped="
+                      << inputs.skipped_count << '\n';
+        }
+        return 0;
+    }
+
     const fs::path config_path = qclint::user_config_path();
     if (config_path.empty()) {
-        std::cerr << "[ERROR] Cannot determine the user configuration path.\n"
-                  << "Run '" << argv[0] << " config init' after setting HOME "
-                  << "or QCLINT_CONFIG.\n";
+        tool_error("config.path",
+                   std::string("cannot determine the user configuration path; run '") +
+                       argv[0] +
+                       " config init' after setting HOME or QCLINT_CONFIG");
         return 2;
     }
     std::error_code config_error;
+    const bool config_exists = fs::exists(config_path, config_error);
+    if (config_error) {
+        tool_error("config.read", "cannot inspect '" +
+                   config_path.string() + "': " + config_error.message());
+        return 2;
+    }
+    if (!config_exists) {
+        tool_error("config.not-found",
+                   "user configuration not found: " + config_path.string() +
+                       "; run '" + argv[0] + " config init' to create it");
+        return 2;
+    }
     if (!fs::is_regular_file(config_path, config_error)) {
-        std::cerr << "[ERROR] User configuration not found: '"
-                  << config_path.string() << "'.\n"
-                  << "Run '" << argv[0] << " config init' to create it.\n";
+        if (config_error) {
+            tool_error("config.read", "cannot inspect '" +
+                       config_path.string() + "': " + config_error.message());
+        } else {
+            tool_error("config.read", "configuration is not a regular file: " +
+                       config_path.string());
+        }
         return 2;
     }
     const qclint::UserConfigResult loaded_config =
         qclint::load_user_config(config_path);
     if (!loaded_config.ok()) {
-        std::cerr << "[ERROR] " << loaded_config.error << '\n';
-        return 2;
-    }
-
-    std::string collection_error;
-    const std::vector<fs::path> files =
-        collect_inputs(options.paths, collection_error);
-    if (!collection_error.empty()) {
-        std::cerr << "[ERROR] " << collection_error << '\n';
-        return 2;
-    }
-    if (files.empty()) {
-        std::cerr << "[ERROR] no .gjf, .com, or .inp files found\n";
+        tool_error("config.invalid", loaded_config.error);
         return 2;
     }
 
     std::size_t failed = 0;
-    for (const auto& file : files) {
+    for (const auto& file : inputs.files) {
         if (!check_file(file, options, loaded_config.config)) {
             ++failed;
         }
     }
-    std::cout << "\nTotal: " << files.size() << "; passed: "
-              << files.size() - failed << "; failed: " << failed << '\n';
+    if (options.verbose) {
+        std::cerr << "qclint: checked=" << inputs.files.size()
+                  << " passed=" << inputs.files.size() - failed
+                  << " failed=" << failed
+                  << " skipped=" << inputs.skipped_count << '\n';
+    }
     return failed == 0 ? 0 : 1;
 }

@@ -24,6 +24,12 @@ std::string lower(std::string value) {
     return value;
 }
 
+bool is_orca_input(const std::filesystem::path& path) {
+    const std::string extension = lower(path.extension().string());
+    return extension == ".inp" || extension == ".in" ||
+           extension == ".orca";
+}
+
 std::vector<Line> split_lines(const std::string& contents) {
     std::vector<Line> lines;
     std::size_t position = 0;
@@ -122,7 +128,7 @@ std::string validate_modified_input(const std::filesystem::path& path,
     std::optional<std::uint64_t> max_memory_bytes;
     bool chemistry_available = true;
 
-    if (lower(path.extension().string()) == ".inp") {
+    if (is_orca_input(path)) {
         const OrcaParseResult parsed = parse_orca_input(input);
         if (!parsed.ok()) return parsed.error;
         nuclear_charge = parsed.molecule.total_nuclear_charge;
@@ -358,8 +364,7 @@ FixResult fix_input_file(const std::filesystem::path& path,
     std::ostringstream buffer;
     buffer << input.rdbuf();
     std::vector<Line> lines = split_lines(buffer.str());
-    const std::string extension = lower(path.extension().string());
-    FixResult result = extension == ".inp"
+    FixResult result = is_orca_input(path)
         ? fix_orca(path, lines, selection, config)
         : fix_gaussian(path, lines, selection, config);
     if (!result.ok() || result.changes.empty()) return result;

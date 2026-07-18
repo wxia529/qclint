@@ -17,7 +17,7 @@ cmake --install build --prefix /desired/prefix
 ## Charge and multiplicity checker
 
 `qclint` reads the charge, multiplicity, processor count, and memory declared
-by Gaussian `.gjf`/`.com` and ORCA `.inp` inputs. It calculates the electron count from the
+by Gaussian `.gjf`/`.com` and ORCA `.inp`/`.in`/`.orca` inputs. It calculates the electron count from the
 molecular specification and checks both physical consistency and user resource
 limits.
 
@@ -79,9 +79,33 @@ reported as not statically checkable rather than being guessed.
 Automatic fixes are deliberately limited to single-job documents; multi-job
 documents are fully checked but left unchanged when a fix cannot be proven safe.
 
+## Output
+
+Successful checks are silent by default. Unsupported file extensions are
+discarded before opening the file or loading the user configuration. Diagnostics
+use a compiler-style format and are written to standard error:
+
+```text
+inputs/water.gjf:2: error[resource.cores]: requested 64 cores; maximum is 32
+inputs/job.inp: warning[chem.unchecked]: generated geometry cannot be checked statically
+```
+
+Use `-v` or `--verbose` to list passed and skipped files and print a summary:
+
+```text
+inputs/water.gjf: note[check.ok]: passed
+notes.txt: note[input.skipped]: unsupported extension .txt
+qclint: checked=1 passed=1 failed=0 skipped=1
+```
+
+Severity labels are colored only when standard error is an interactive terminal.
+Redirected output and CI logs remain plain text; setting `NO_COLOR` also disables
+color.
+
 ## Exit codes
 
-- `0`: every requested check passed, or a configuration command succeeded.
+- `0`: every supported input passed, no supported inputs were found, or a
+  configuration command succeeded.
 - `1`: at least one input failed a lint check.
 - `2`: command-line, configuration, file access, or parsing error.
 

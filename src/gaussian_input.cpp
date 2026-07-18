@@ -239,6 +239,7 @@ GaussianParseResult parse_gaussian_input(std::istream& input) {
                 : checkpoint_match[2].matched
                     ? checkpoint_match[2].str()
                     : checkpoint_match[3].str();
+            molecule.checkpoint_line = index;
         }
         const bool resource_directive =
             parse_processor_directive(

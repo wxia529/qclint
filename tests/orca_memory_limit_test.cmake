@@ -11,7 +11,8 @@ execute_process(
     ERROR_VARIABLE check_error
 )
 if(NOT check_result EQUAL 1 OR
-   NOT check_output MATCHES "maximum is 204 GiB")
+   NOT check_error MATCHES
+       "error\\[resource.memory\\]: requested 218.75 GiB; maximum is 204 GiB")
     message(FATAL_ERROR
             "ORCA memory above its configured limit was not rejected:\n"
             "${check_output}${check_error}")
