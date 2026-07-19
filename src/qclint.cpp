@@ -211,13 +211,13 @@ int show_config() {
         std::cout << "gaussian_max_memory = "
                   << *loaded.config.gaussian_max_memory_bytes /
                          (1024ULL * 1024ULL * 1024ULL)
-                  << '\n';
+                  << "GB\n";
     }
     if (loaded.config.orca_max_memory_bytes) {
         std::cout << "orca_max_memory = "
                   << *loaded.config.orca_max_memory_bytes /
                          (1024ULL * 1024ULL * 1024ULL)
-                  << '\n';
+                  << "GB\n";
     }
     return 0;
 }
@@ -496,6 +496,8 @@ std::string resource_code(qclint::ResourceError error) {
         case qclint::ResourceError::missing_cores:
         case qclint::ResourceError::cores_exceed_limit:
             return "resource.cores";
+        case qclint::ResourceError::cores_below_limit:
+            return "resource.cores-underallocated";
         case qclint::ResourceError::missing_memory:
             return "resource.memory";
         case qclint::ResourceError::memory_below_limit:
@@ -571,10 +573,12 @@ bool check_molecule(const ParsedMolecule& molecule,
     for (const auto& diagnostic : resource_result.diagnostics) {
         const std::optional<std::size_t> line =
             diagnostic.code == qclint::ResourceError::missing_cores ||
+                    diagnostic.code == qclint::ResourceError::cores_below_limit ||
                     diagnostic.code == qclint::ResourceError::cores_exceed_limit
                 ? molecule.cores_line : molecule.memory_line;
         const std::string severity =
-            diagnostic.code == qclint::ResourceError::memory_below_limit
+            diagnostic.code == qclint::ResourceError::cores_below_limit ||
+                    diagnostic.code == qclint::ResourceError::memory_below_limit
                 ? "warning" : "error";
         file_diagnostic(path, line, severity, resource_code(diagnostic.code),
                         diagnostic.message, job);

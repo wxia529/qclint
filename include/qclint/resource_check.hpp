@@ -20,6 +20,7 @@ struct ResourceLimits {
 enum class ResourceError {
     missing_cores,
     missing_memory,
+    cores_below_limit,
     cores_exceed_limit,
     memory_below_limit,
     memory_exceeds_limit,
@@ -35,7 +36,8 @@ struct ResourceResult {
 
     bool ok() const noexcept {
         for (const auto& diagnostic : diagnostics) {
-            if (diagnostic.code != ResourceError::memory_below_limit) {
+            if (diagnostic.code != ResourceError::cores_below_limit &&
+                diagnostic.code != ResourceError::memory_below_limit) {
                 return false;
             }
         }

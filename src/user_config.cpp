@@ -28,6 +28,14 @@ bool parse_positive_integer(const std::string& text, std::uint64_t& value) {
     return parsed.ec == std::errc{} && parsed.ptr == end && value > 0;
 }
 
+bool parse_memory_gb(const std::string& text, std::uint64_t& value) {
+    if (text.size() <= 2 || text.substr(text.size() - 2) != "GB") {
+        return false;
+    }
+    return parse_positive_integer(trim(text.substr(0, text.size() - 2)),
+                                  value);
+}
+
 }  // namespace
 
 std::filesystem::path user_config_path() {
@@ -98,18 +106,22 @@ UserConfigResult parse_user_config(std::istream& input) {
         }
 
         std::uint64_t value = 0;
-        if (!parse_positive_integer(value_text, value)) {
-            return {{}, "configuration value for '" + key +
-                         "' must be a positive integer at line " +
-                         std::to_string(line_number)};
-        }
-
         if (key == "max_cores") {
+            if (!parse_positive_integer(value_text, value)) {
+                return {{}, "configuration value for 'max_cores' must be a "
+                            "positive integer at line " +
+                            std::to_string(line_number)};
+            }
             if (value > std::numeric_limits<std::uint32_t>::max()) {
                 return {{}, "configuration value for 'max_cores' is too large"};
             }
             config.max_cores = static_cast<std::uint32_t>(value);
         } else {
+            if (!parse_memory_gb(value_text, value)) {
+                return {{}, "configuration value for '" + key +
+                            "' must be a positive integer followed by GB at "
+                            "line " + std::to_string(line_number)};
+            }
             if (value > std::numeric_limits<std::uint64_t>::max() / gibibyte) {
                 return {{}, "configuration value for '" + key +
                             "' is too large"};
@@ -180,8 +192,8 @@ bool write_default_user_config(
     output
         << "# qclint user resource limits\n"
         << "max_cores = 32       # maximum CPU cores\n"
-        << "gaussian_max_memory = 64 # maximum Gaussian memory in GiB\n"
-        << "orca_max_memory = 51     # maximum ORCA memory in GiB\n";
+        << "gaussian_max_memory = 64GB # maximum Gaussian memory\n"
+        << "orca_max_memory = 51GB     # maximum ORCA memory\n";
     output.close();
     if (!output) {
         error = "cannot write configuration '" + temporary.string() + "'";

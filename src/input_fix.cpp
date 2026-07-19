@@ -110,9 +110,9 @@ std::string gaussian_memory_directive(std::uint64_t bytes) {
     constexpr std::uint64_t gibibyte = 1024ULL * 1024ULL * 1024ULL;
     constexpr std::uint64_t mebibyte = 1024ULL * 1024ULL;
     if (bytes % gibibyte == 0) {
-        return "%mem=" + std::to_string(bytes / gibibyte) + "GiB";
+        return "%mem=" + std::to_string(bytes / gibibyte) + "GB";
     }
-    return "%mem=" + std::to_string(bytes / mebibyte) + "MiB";
+    return "%mem=" + std::to_string(bytes / mebibyte) + "MB";
 }
 
 std::string validate_modified_input(const std::filesystem::path& path,
@@ -156,8 +156,8 @@ std::string validate_modified_input(const std::filesystem::path& path,
         if (!chemistry.ok()) return chemistry.diagnostics.front().message;
     }
     if (selection.cores && config.max_cores &&
-        (!resources.cores || *resources.cores > *config.max_cores)) {
-        return "processor fix did not produce a valid limit";
+        (!resources.cores || *resources.cores != *config.max_cores)) {
+        return "processor fix did not produce the configured allocation";
     }
     if (selection.memory && max_memory_bytes &&
         (!resources.memory_bytes ||
@@ -231,7 +231,7 @@ FixResult fix_gaussian(const std::filesystem::path& path,
 
     const std::size_t insert = insertion_point(lines);
     if (selection.cores && config.max_cores &&
-        (!molecule.resources.cores || *molecule.resources.cores > *config.max_cores)) {
+        (!molecule.resources.cores || *molecule.resources.cores != *config.max_cores)) {
         bool found = false;
         const std::regex pattern(R"(%nproc(?:shared)?\s*=\s*(\d+))",
                                  std::regex_constants::icase);
@@ -268,7 +268,7 @@ FixResult fix_gaussian(const std::filesystem::path& path,
             *config.gaussian_max_memory_bytes;
         const std::string directive = gaussian_memory_directive(max_memory);
         bool found = false;
-        const std::regex pattern(R"(%mem\s*=\s*(\d+)\s*[kmgt]?(?:i?[bw])?)",
+        const std::regex pattern(R"(%mem\s*=\s*(\d+)\s*[kmgt]?(?:[bw])?)",
                                  std::regex_constants::icase);
         if (molecule.memory_line &&
             *molecule.memory_line + prefix_insertions < lines.size()) {
@@ -302,7 +302,7 @@ FixResult fix_orca(const std::filesystem::path& path,
 
     const std::size_t insert = insertion_point(lines);
     if (selection.cores && config.max_cores &&
-        (!molecule.resources.cores || *molecule.resources.cores > *config.max_cores)) {
+        (!molecule.resources.cores || *molecule.resources.cores != *config.max_cores)) {
         bool found = false;
         const std::regex nprocs(R"(\bnprocs(?:_world)?\s*(?:=\s*)?(\d+))",
                                 std::regex_constants::icase);
@@ -320,7 +320,7 @@ FixResult fix_orca(const std::filesystem::path& path,
     }
 
     const std::uint64_t cores = (selection.cores && config.max_cores &&
-        (!molecule.resources.cores || *molecule.resources.cores > *config.max_cores))
+        (!molecule.resources.cores || *molecule.resources.cores != *config.max_cores))
         ? *config.max_cores : molecule.resources.cores.value_or(1);
     const std::uint64_t max_memory = config.orca_max_memory_bytes
         ? *config.orca_max_memory_bytes : 0;

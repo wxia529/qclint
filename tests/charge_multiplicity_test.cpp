@@ -76,10 +76,16 @@ int main() {
             2ULL * 1024 * 1024 * 8);
     REQUIRE(extended.molecule.total_nuclear_charge == 8);
 
+    std::istringstream gaussian_gibibyte_unit(
+        "%Mem=2GiB\n"
+        "# test\n\ninvalid unit\n\n0 1\nH 0 0 0\n\n"
+    );
+    REQUIRE(!qclint::parse_gaussian_input(gaussian_gibibyte_unit).ok());
+
     std::istringstream configuration(
         "max_cores = 8 # maximum cores\n"
-        "gaussian_max_memory = 4 # GiB\n"
-        "orca_max_memory = 3 # GiB\n"
+        "gaussian_max_memory = 4GB\n"
+        "orca_max_memory = 3GB\n"
     );
     const auto configured = qclint::parse_user_config(configuration);
     REQUIRE(configured.ok());
@@ -91,7 +97,7 @@ int main() {
 
     std::istringstream missing_memory_policy(
         "max_cores = 8\n"
-        "gaussian_max_memory = 4\n"
+        "gaussian_max_memory = 4GB\n"
     );
     const auto missing_policy =
         qclint::parse_user_config(missing_memory_policy);
@@ -99,11 +105,22 @@ int main() {
     REQUIRE(missing_policy.error.find("orca_max_memory") !=
             std::string::npos);
 
+    std::istringstream ambiguous_memory_unit(
+        "max_cores = 8\n"
+        "gaussian_max_memory = 4\n"
+        "orca_max_memory = 3GB\n"
+    );
+    const auto ambiguous_policy =
+        qclint::parse_user_config(ambiguous_memory_unit);
+    REQUIRE(!ambiguous_policy.ok());
+    REQUIRE(ambiguous_policy.error.find("followed by GB") !=
+            std::string::npos);
+
     std::istringstream obsolete_memory_policy(
         "max_cores = 8\n"
-        "max_memory = 4\n"
-        "gaussian_max_memory = 4\n"
-        "orca_max_memory = 3\n"
+        "max_memory = 4GB\n"
+        "gaussian_max_memory = 4GB\n"
+        "orca_max_memory = 3GB\n"
     );
     REQUIRE(!qclint::parse_user_config(obsolete_memory_policy).ok());
 
@@ -123,8 +140,22 @@ int main() {
     REQUIRE(resource_result.diagnostics.back().code ==
            qclint::ResourceError::memory_below_limit);
 
+    resources.cores = 7;
+    resources.memory_bytes = 4ULL * 1024 * 1024 * 1024;
+    const auto underallocated_core_result =
+        qclint::ResourceChecker{}.check(resources, gaussian_limits);
+    REQUIRE(underallocated_core_result.ok());
+    REQUIRE(underallocated_core_result.diagnostics.size() == 1);
+    REQUIRE(underallocated_core_result.diagnostics.front().code ==
+           qclint::ResourceError::cores_below_limit);
+    resources.cores = 8;
+    const auto exact_core_result =
+        qclint::ResourceChecker{}.check(resources, gaussian_limits);
+    REQUIRE(exact_core_result.ok());
+    REQUIRE(exact_core_result.diagnostics.empty());
+
     qclint::ResourceRequest orca_resources;
-    orca_resources.cores = 1;
+    orca_resources.cores = 8;
     orca_resources.memory_bytes =
         9ULL * 1024 * 1024 * 1024 / 10;
     const qclint::ResourceLimits orca_limits{
@@ -147,7 +178,7 @@ int main() {
         qclint::ResourceChecker{}.check(orca_resources, orca_limits);
     REQUIRE(!excessive_orca_resource_result.ok());
     REQUIRE(excessive_orca_resource_result.diagnostics.front().message.find(
-                "maximum is 3 GiB") != std::string::npos);
+                "maximum is 3 GB") != std::string::npos);
 
     std::istringstream malformed("# test\n\ntitle\n\nzero one\nH 0 0 0\n");
     REQUIRE(!qclint::parse_gaussian_input(malformed).ok());

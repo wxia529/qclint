@@ -35,8 +35,8 @@ file contains simple integer limits:
 
 ```ini
 max_cores = 32       # maximum CPU cores
-gaussian_max_memory = 64 # maximum Gaussian memory in GiB
-orca_max_memory = 51     # maximum ORCA memory in GiB
+gaussian_max_memory = 64GB # maximum Gaussian memory
+orca_max_memory = 51GB     # maximum ORCA memory
 ```
 
 Expected charge and multiplicity values are optional:
@@ -63,7 +63,7 @@ ORCA support includes `! PALn`, one-line and multiline `%pal` blocks,
 `%maxcore`, inline `xyz`/`int`/`internal`/`gzmt` coordinates, `%coords`
 blocks, and external `xyzfile` geometries. Since ORCA `MaxCore` is specified
 in MB per process, qclint checks total requested memory as `MaxCore * nprocs`.
-Gaussian and ORCA have independent absolute GiB allocations, so users can
+Gaussian and ORCA have independent absolute GB allocations, so users can
 account for each program's memory behavior without interpreting percentages.
 Requesting less memory produces an underallocation warning, an exact match is
 silent, and requesting more is an error. ORCA memory fixes derive the
@@ -71,9 +71,14 @@ per-process MaxCore value from `orca_max_memory` and the effective process
 count. `--fix memory` sets either an underallocated or excessive request to the
 maximum usable configured allocation.
 
+Processor allocation follows the same exclusive-node policy: fewer than
+`max_cores` produces a warning, an exact match is silent, and more is an error.
+`--fix cores` sets any non-matching processor request to `max_cores`.
+
 Gaussian memory supports byte and word units (`KB`/`MB`/`GB`/`TB` and
 `KW`/`MW`/`GW`/`TW`), bare word counts, `%NProcShared`, and `%CPU` processor
-lists. ONIOM state lists, ghost centers, complete `--Link1--` jobs, and
+lists. Gaussian directives use its native unit spellings rather than
+`KiB`/`MiB`/`GiB`/`TiB`. ONIOM state lists, ghost centers, complete `--Link1--` jobs, and
 checkpoint-geometry inheritance are recognized.
 
 ORCA `$new_job` sections are checked independently. Compound scripts receive

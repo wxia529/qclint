@@ -27,6 +27,6 @@ if(NOT resource_result EQUAL 1 OR
    NOT resource_error MATCHES
        ":2: error\\[resource.cores\\]: requested 4 cores; maximum is 2" OR
    NOT resource_error MATCHES
-       ":3: error\\[resource.memory\\]: requested 2 GiB; maximum is 1 GiB")
+       ":3: error\\[resource.memory\\]: requested 2 GB; maximum is 1 GB")
     message(FATAL_ERROR "Resource limits did not produce a lint failure")
 endif()

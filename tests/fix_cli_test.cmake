@@ -20,9 +20,40 @@ execute_process(
 )
 file(READ "${GAUSSIAN_UNDER_COPY}" gaussian_under_contents)
 if(NOT gaussian_under_result EQUAL 0 OR
-   NOT gaussian_under_contents MATCHES "%mem=4GiB")
+   NOT gaussian_under_contents MATCHES "%mem=4GB")
     message(FATAL_ERROR
             "Gaussian underallocated memory was not raised to the configured allocation:\n${gaussian_under_error}")
+endif()
+
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E env "QCLINT_CONFIG=${NORMAL_CONFIG}"
+            "${QCLINT_EXE}" --fix cores "${GAUSSIAN_UNDER_COPY}"
+    RESULT_VARIABLE gaussian_cores_under_result
+    ERROR_VARIABLE gaussian_cores_under_error
+)
+file(READ "${GAUSSIAN_UNDER_COPY}" gaussian_cores_under_contents)
+if(NOT gaussian_cores_under_result EQUAL 0 OR
+   NOT gaussian_cores_under_contents MATCHES "%nprocshared=8")
+    message(FATAL_ERROR
+            "Gaussian underallocated cores were not raised to the configured allocation:\n${gaussian_cores_under_error}")
+endif()
+
+set(ORCA_CORES_UNDER_COPY "${TEST_ROOT}/underallocated-cores.inp")
+file(READ "${ORCA_INPUT}" orca_cores_under_contents)
+string(REPLACE "nprocs  64" "nprocs  32"
+       orca_cores_under_contents "${orca_cores_under_contents}")
+file(WRITE "${ORCA_CORES_UNDER_COPY}" "${orca_cores_under_contents}")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E env "QCLINT_CONFIG=${ORCA_CONFIG}"
+            "${QCLINT_EXE}" --fix cores "${ORCA_CORES_UNDER_COPY}"
+    RESULT_VARIABLE orca_cores_under_result
+    ERROR_VARIABLE orca_cores_under_error
+)
+file(READ "${ORCA_CORES_UNDER_COPY}" orca_cores_fixed_contents)
+if(NOT orca_cores_under_result EQUAL 0 OR
+   NOT orca_cores_fixed_contents MATCHES "nprocs[ \t]+64")
+    message(FATAL_ERROR
+            "ORCA underallocated cores were not raised to the configured allocation:\n${orca_cores_under_error}")
 endif()
 
 set(ORCA_UNDER_COPY "${TEST_ROOT}/underallocated.inp")
@@ -52,7 +83,7 @@ file(READ "${GAUSSIAN_CPU_COPY}" gaussian_cpu_contents)
 if(NOT gaussian_cpu_result EQUAL 0 OR
    NOT gaussian_cpu_contents MATCHES "%chk=cpu.chk" OR
    NOT gaussian_cpu_contents MATCHES "%CPU=0-1" OR
-   NOT gaussian_cpu_contents MATCHES "%mem=1GiB")
+   NOT gaussian_cpu_contents MATCHES "%mem=1GB")
     message(FATAL_ERROR "Gaussian CPU fix failed:\n${gaussian_cpu_output}")
 endif()
 
@@ -69,7 +100,7 @@ file(READ "${GAUSSIAN_COPY}" gaussian_contents)
 if(NOT gaussian_result EQUAL 0 OR
    NOT gaussian_contents MATCHES "%chk=renamed.chk" OR
    NOT gaussian_contents MATCHES "%nprocshared=2" OR
-   NOT gaussian_contents MATCHES "%mem=1GiB" OR
+   NOT gaussian_contents MATCHES "%mem=1GB" OR
    NOT gaussian_contents MATCHES "0 1")
     message(FATAL_ERROR "Gaussian --fix-all failed:\n${gaussian_output}\n${gaussian_error}")
 endif()

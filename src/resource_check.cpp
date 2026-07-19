@@ -9,11 +9,11 @@ std::string format_bytes(std::uint64_t bytes) {
     constexpr std::uint64_t gibibyte = 1024ULL * 1024ULL * 1024ULL;
     std::ostringstream output;
     if (bytes % gibibyte == 0) {
-        output << bytes / gibibyte << " GiB";
+        output << bytes / gibibyte << " GB";
     } else {
         output << std::fixed << std::setprecision(2)
                << static_cast<double>(bytes) / static_cast<double>(gibibyte)
-               << " GiB";
+               << " GB";
     }
     return output.str();
 }
@@ -28,6 +28,13 @@ ResourceResult ResourceChecker::check(
             result.diagnostics.push_back({
                 ResourceError::missing_cores,
                 "no processor count directive found"
+            });
+        } else if (*request.cores < *limits.max_cores) {
+            result.diagnostics.push_back({
+                ResourceError::cores_below_limit,
+                "requested " + std::to_string(*request.cores) +
+                " cores; configured allocation is " +
+                std::to_string(*limits.max_cores)
             });
         } else if (*request.cores > *limits.max_cores) {
             result.diagnostics.push_back({

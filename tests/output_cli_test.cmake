@@ -26,8 +26,10 @@ execute_process(
 )
 if(NOT quiet_result EQUAL 0 OR NOT quiet_output STREQUAL "" OR
    NOT quiet_error MATCHES
-       ":3: warning\\[resource.memory-underallocated\\]: requested 2 GiB; configured allocation is 4 GiB")
-    message(FATAL_ERROR "Underallocated memory did not produce a warning")
+       ":2: warning\\[resource.cores-underallocated\\]: requested 4 cores; configured allocation is 8" OR
+   NOT quiet_error MATCHES
+       ":3: warning\\[resource.memory-underallocated\\]: requested 2 GB; configured allocation is 4 GB")
+    message(FATAL_ERROR "Underallocated resources did not produce warnings")
 endif()
 
 execute_process(

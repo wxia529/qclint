@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-set(QCLINT_VERSION "1.4.0" CACHE STRING "qclint release version")
+set(QCLINT_VERSION "1.5.0" CACHE STRING "qclint release version")
 project(qclint VERSION "${QCLINT_VERSION}" LANGUAGES CXX)
 
 include(GNUInstallDirs)

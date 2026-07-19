@@ -77,7 +77,7 @@ bool parse_memory_directive(
     std::string& error
 ) {
     static const std::regex pattern(
-        R"(^\s*%mem\s*=\s*(\d+)\s*([kmgt]?)(i?[bw])?\s*$)",
+        R"(^\s*%mem\s*=\s*(\d+)\s*([kmgt]?)([bw])?\s*$)",
         std::regex_constants::icase
     );
     std::smatch match;
