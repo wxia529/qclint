@@ -14,52 +14,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        compiler: [g++, clang++]
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Configure
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+      - name: Vet
+        run: go vet ./...
+      - name: Test with race detector
+        run: go test -race ./...
+      - name: Build static binary
         env:
-          CXX: ${{ matrix.compiler }}
-        run: >-
-          cmake -S . -B build
-          -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion"
-      - name: Build
-        run: cmake --build build --parallel 2
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
-
-  sanitizers:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - name: Configure
-        run: >-
-          cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug
-          -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -fsanitize=address,undefined -fno-omit-frame-pointer"
-          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
-      - name: Build
-        run: cmake --build build-asan --parallel 2
-      - name: Test
-        env:
-          ASAN_OPTIONS: detect_leaks=1
-        # The package-consumer test intentionally links without sanitizer
-        # runtimes; installation is already exercised by every matrix build.
-        run: ctest --test-dir build-asan --output-on-failure -E qclint_package
+          CGO_ENABLED: "0"
+        run: go build -trimpath -o build/qclint ./cmd/qclint
 
   fuzz-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Configure
-        env:
-          CXX: clang++
-        run: cmake -S . -B build-fuzz -DQCLINT_BUILD_FUZZER=ON
-      - name: Build
-        run: cmake --build build-fuzz --target qclint_parser_fuzz --parallel 2
-      - name: Run smoke fuzzing
-        run: build-fuzz/qclint_parser_fuzz -runs=1000
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run parser fuzz smoke test
+        run: go test ./qclint -run=^$ -fuzz=FuzzParsers -fuzztime=10s

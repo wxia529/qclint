@@ -1,0 +1,78 @@
+name: Release Linux package
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build and package
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must have the form vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+
+          package="qclint-${version}-linux-x86_64"
+          binary="dist/${package}/qclint"
+          rm -rf dist
+          mkdir -p "dist/${package}"
+
+          go test ./...
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -trimpath \
+            -ldflags="-s -w -X github.com/wxia529/qclint/qclint.Version=${version}" \
+            -o "$binary" \
+            ./cmd/qclint
+
+          reported_version="$("$binary" --version)"
+          if [[ "$reported_version" != "qclint $version" ]]; then
+            echo "Version $version does not match $reported_version" >&2
+            exit 1
+          fi
+          if ldd "$binary" >/dev/null 2>&1; then
+            echo "Release binary is dynamically linked" >&2
+            exit 1
+          fi
+
+          cp README.md "dist/${package}/"
+          tar -C dist -czf "dist/${package}.tar.gz" "$package"
+          (cd dist && sha256sum "${package}.tar.gz" > "${package}.tar.gz.sha256")
+
+          echo "archive=dist/$package.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "checksum=dist/$package.tar.gz.sha256" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ARCHIVE: ${{ steps.package.outputs.archive }}
+          RELEASE_CHECKSUM: ${{ steps.package.outputs.checksum }}
+          RELEASE_VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "$RELEASE_ARCHIVE" \
+            "$RELEASE_CHECKSUM" \
+            --verify-tag \
+            --generate-notes \
+            --title "qclint $RELEASE_VERSION"

@@ -1,59 +1,63 @@
 # qclint
 
-`qclint_core` contains only format-independent chemical validation.
-`qclint_gaussian` is a separate input adapter. New front ends should parse their format into
-`ChargeMultiplicityInput` and reuse `ChargeMultiplicityChecker`; chemical
-rules should not be duplicated in the format adapter or CLI.
+qclint is a Go command and reusable package for validating Gaussian and ORCA
+input files. Format adapters share the same chemistry and resource policy
+instead of duplicating those rules in the CLI.
 
 ## Build and test
 
 ```sh
-cmake -S . -B build
-cmake --build build
-ctest --test-dir build --output-on-failure
-cmake --install build --prefix /desired/prefix
+go test ./...
+go build -o build/qclint ./cmd/qclint
+make install PREFIX=/desired/prefix
 ```
+
+The module requires Go 1.23 or newer and has no third-party dependencies.
 
 ## Charge and multiplicity checker
 
 `qclint` reads the charge, multiplicity, processor count, and memory declared
-by Gaussian `.gjf`/`.com` and ORCA `.inp`/`.in`/`.orca` inputs. It calculates the electron count from the
-molecular specification and checks both physical consistency and user resource
-limits.
+by Gaussian `.gjf`/`.com` and ORCA `.inp`/`.in`/`.orca` inputs. It calculates
+the electron count from the molecular specification and checks both physical
+consistency and user resource limits.
 
 Create the user configuration first:
 
 ```sh
-build/qclint config init
-build/qclint config show
+qclint config init
+qclint config show
 ```
 
 The default path follows the platform user configuration convention
 (`~/.config/qclint/config` on Linux). Set `QCLINT_CONFIG` to use a different
 path. If the configuration is missing, normal checks stop with an error. The
-file contains simple integer limits:
+file contains an integer core limit and decimal memory limits:
 
 ```ini
 max_cores = 32       # maximum CPU cores
-gaussian_max_memory = 64GB # maximum Gaussian memory
-orca_max_memory = 51GB     # maximum ORCA memory
+gaussian_max_memory = 63.5GB # maximum Gaussian memory
+orca_max_memory = 50.75GB    # maximum ORCA memory
 ```
+
+Memory values may be integers or decimal GB values. They are converted to the
+nearest byte; scientific notation and ambiguous units such as `GiB` are not
+accepted.
 
 Expected charge and multiplicity values are optional:
 
 ```sh
-build/qclint molecule.gjf
-build/qclint --charge 0 --multiplicity 3 molecule.gjf
-build/qclint --multiplicity 2 inputs/*.inp
+qclint molecule.gjf
+qclint --charge 0 --multiplicity 3 molecule.gjf
+qclint --multiplicity 2 inputs/*.inp
 ```
 
 Fixes are selectable and composable:
 
 ```sh
-build/qclint --fix chk molecule.gjf
-build/qclint --fix cores --fix memory calculation.inp
-build/qclint --fix-all inputs/*.inp
-build/qclint --fix-all --dry-run inputs/*.inp
+qclint --fix chk molecule.gjf
+qclint --fix cores --fix memory calculation.inp
+qclint --fix-all inputs/*.inp
+qclint --fix-all --dry-run inputs/*.inp
 ```
 
 Charge and multiplicity are check-only fields. They are never modified by
@@ -78,8 +82,8 @@ Processor allocation follows the same exclusive-node policy: fewer than
 Gaussian memory supports byte and word units (`KB`/`MB`/`GB`/`TB` and
 `KW`/`MW`/`GW`/`TW`), bare word counts, `%NProcShared`, and `%CPU` processor
 lists. Gaussian directives use its native unit spellings rather than
-`KiB`/`MiB`/`GiB`/`TiB`. ONIOM state lists, ghost centers, complete `--Link1--` jobs, and
-checkpoint-geometry inheritance are recognized.
+`KiB`/`MiB`/`GiB`/`TiB`. ONIOM state lists, ghost centers, complete
+`--Link1--` jobs, and checkpoint-geometry inheritance are recognized.
 
 ORCA `$new_job` sections are checked independently. Compound scripts receive
 strict global PAL/MaxCore checks, but dynamically generated geometries are
@@ -119,10 +123,14 @@ color.
 - `1`: at least one input failed a lint check.
 - `2`: command-line, configuration, file access, or parsing error.
 
-`qclint --version` prints the installed version. Parser fuzzing can be built
-with Clang using `-DQCLINT_BUILD_FUZZER=ON`.
+`qclint --version` prints the installed version. Run the native Go fuzz target
+with:
 
-The reusable API is declared in
-`include/qclint/charge_multiplicity.hpp`.  The Gaussian-only adapter is kept in
-`include/qclint/gaussian_input.hpp`; the ORCA adapter is independently exposed
-through `include/qclint/orca_input.hpp`.
+```sh
+make fuzz
+```
+
+The reusable API is provided by
+`github.com/wxia529/qclint/qclint`. `ParseGaussian`, `ParseORCA`,
+`CheckChargeMultiplicity`, `CheckResources`, and `FixFile` can be used without
+the command-line front end.
